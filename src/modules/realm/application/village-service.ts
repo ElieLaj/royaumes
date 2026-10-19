@@ -1,3 +1,4 @@
+import { withOptimisticRetry } from '@/platform/event-store/retry'
 import {
   type DomainError,
   decide,
@@ -17,23 +18,23 @@ export type CommandResult = { ok: true; view: VillageView } | { ok: false; error
 export function createVillageService(repo: VillageRepository, clock = () => Date.now()) {
   /**
    * Traite une commande : charger, décider, enregistrer, puis renvoyer la vue.
-   * L'horloge n'est lue qu'une fois, pour que la décision et la vue portent sur le même instant.
+   * L'horloge est lue une fois par tentative, pour que la décision et la vue portent sur le
+   * même instant. En cas de conflit d'écriture (ConcurrencyError), l'ensemble du traitement
+   * est rejoué sur l'état à jour.
    */
-  async function execute(userId: string, command: VillageCommand): Promise<CommandResult> {
-    const { state, version } = await repo.load(userId)
-    const now = clock()
+  function execute(userId: string, command: VillageCommand): Promise<CommandResult> {
+    return withOptimisticRetry(async () => {
+      const { state, version } = await repo.load(userId)
+      const now = clock()
 
-    const decision = decide(state, command, now)
-    if (!decision.ok) return decision
+      const decision = decide(state, command, now)
+      if (!decision.ok) return decision
 
-    /**
-     * DETTE TECHNIQUE DT-003 (docs/qualite/dette-technique.md) : un conflit de version
-     * lève une exception non traitée ; il sera rejoué au TD3.
-     */
-    await repo.save(userId, version, decision.events)
+      await repo.save(userId, version, decision.events)
 
-    const updated = await repo.load(userId)
-    return { ok: true, view: toView(updated.state, now) }
+      const updated = await repo.load(userId)
+      return { ok: true, view: toView(updated.state, now) }
+    })
   }
 
   /** Renvoie la vue du village d'un joueur, ou null s'il n'en a pas encore fondé. */
