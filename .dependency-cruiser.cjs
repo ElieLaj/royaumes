@@ -36,6 +36,13 @@ module.exports = {
       to: { pathNot: '^src/modules/$1/domain/' },
     },
     {
+      name: 'application-ignores-infrastructure',
+      comment: "La couche application d'un module n'importe jamais son infrastructure.",
+      severity: 'error',
+      from: { path: '^src/modules/([^/]+)/application/' },
+      to: { path: '^src/modules/$1/infrastructure/' },
+    },
+    {
       // Règle 3 : la plateforme est générique et ignore les modules métier.
       name: 'platform-ignores-modules',
       comment:

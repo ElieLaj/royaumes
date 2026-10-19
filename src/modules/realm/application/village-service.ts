@@ -1,0 +1,45 @@
+import {
+  type DomainError,
+  decide,
+  toView,
+  type VillageCommand,
+  type VillageView,
+} from '../domain/village'
+import type { VillageRepository } from './village-repository'
+
+/** Résultat d'une commande : la vue mise à jour, ou l'erreur métier. */
+export type CommandResult = { ok: true; view: VillageView } | { ok: false; error: DomainError }
+
+/**
+ * Service applicatif du Village : orchestre le domaine et la persistance.
+ * Il reçoit ses dépendances en paramètre : le port de persistance et l'horloge.
+ */
+export function createVillageService(repo: VillageRepository, clock = () => Date.now()) {
+  /**
+   * Traite une commande : charger, décider, enregistrer, puis renvoyer la vue.
+   * L'horloge n'est lue qu'une fois, pour que la décision et la vue portent sur le même instant.
+   */
+  async function execute(userId: string, command: VillageCommand): Promise<CommandResult> {
+    const { state, version } = await repo.load(userId)
+    const now = clock()
+
+    const decision = decide(state, command, now)
+    if (!decision.ok) return decision
+
+    await repo.save(userId, version, decision.events)
+
+    const updated = await repo.load(userId)
+    return { ok: true, view: toView(updated.state, now) }
+  }
+
+  /** Renvoie la vue du village d'un joueur, ou null s'il n'en a pas encore fondé. */
+  async function getView(userId: string): Promise<VillageView | null> {
+    const { state } = await repo.load(userId)
+    return state.founded ? toView(state, clock()) : null
+  }
+
+  return { execute, getView }
+}
+
+/** Type du service, déduit de sa fabrique : utilisé par l'API du module. */
+export type VillageService = ReturnType<typeof createVillageService>
