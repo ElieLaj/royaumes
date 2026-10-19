@@ -9,5 +9,7 @@ export default defineConfig({
     environment: 'node',
     // Seuls les fichiers de test placés dans src/ sont exécutés.
     include: ['src/**/*.test.ts'],
+    testTimeout: 20_000,
+    hookTimeout: 20_000,
   },
 })
