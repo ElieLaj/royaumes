@@ -1,3 +1,5 @@
+import { createBetterAuth } from '@/platform/auth/better-auth'
+import type { AuthPort } from '@/platform/auth/port'
 import { createDatabase } from '@/platform/db/client'
 import { createEventStore } from '@/platform/event-store/event-store'
 import { type Api, createApi } from './create-api'
@@ -5,6 +7,8 @@ import { type Api, createApi } from './create-api'
 /** Ce que l'application expose à Next.js. */
 interface Server {
   api: Api
+  /** Authentification, utilisée aussi par les pages rendues sur le serveur. */
+  auth: AuthPort
   /** Résolue lorsque la base de données est prête. */
   ready: Promise<void>
 }
@@ -22,13 +26,14 @@ const globalForServer = globalThis as unknown as { royaumes?: Server }
  * Cette construction paresseuse garantit qu'aucun code de l'application,
  * et en particulier aucune connexion à la base, ne s'exécute lorsque Next.js
  * analyse les fichiers pendant la construction.
- * La plateforme est assemblée ici : la base de données, puis le journal d'événements.
+ * La plateforme est assemblée ici : la base de données, puis les briques qui l'utilisent.
  */
 export function getServer(): Server {
   if (!globalForServer.royaumes) {
     const { db, ready } = createDatabase()
     const store = createEventStore(db)
-    globalForServer.royaumes = { api: createApi({ store, ready }), ready }
+    const auth = createBetterAuth(db)
+    globalForServer.royaumes = { api: createApi({ auth, store, ready }), auth, ready }
   }
   return globalForServer.royaumes
 }
