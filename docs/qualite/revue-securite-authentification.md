@@ -1,0 +1,40 @@
+# Revue de sécurité du parcours d'authentification
+
+- Date : 2026-10-20
+- Périmètre : inscription, connexion, déconnexion, sessions, accès à l'API et aux pages du jeu.
+- Références : OWASP Top 10, OWASP ASVS.
+- Méthode : vérifications exécutées sur un serveur local (tests Vitest, requêtes `curl` et parcours
+  dans le navigateur), avec une base jetable supprimée ensuite.
+
+| N° | Exigence | Vérification | Constat | Statut |
+| --- | --- | --- | --- | --- |
+| S1 | Les mots de passe ne sont conservés que sous forme d'empreinte, par une fonction dédiée | Test « ne conserve qu'une empreinte du mot de passe » ; documentation de Better Auth | Le test lit la colonne `identity.account.password` : elle est renseignée et ne contient pas le mot de passe saisi. Le recours à scrypt repose sur la documentation de Better Auth ; aucun test du projet ne le vérifie. | conforme |
+| S2 | Les mots de passe comportent au moins 8 caractères | Test « refuse un mot de passe trop court » | Le test obtient un code 400 pour un mot de passe de 5 caractères. Le formulaire impose aussi `minLength=8`, et la page affiche un message en français. | conforme |
+| S3 | Les tentatives répétées d'inscription et de connexion sont limitées | Sous-partie 2.3 ; configuration de `better-auth.ts` | Mesuré sur le serveur local : en 45 inscriptions successives depuis une même adresse (en-tête `x-forwarded-for` fixe), 40 sont acceptées et la 41e reçoit un code 429. Les compteurs sont conservés dans la mémoire de chaque instance : sur Vercel, la limite réelle est multipliée par le nombre d'instances actives. Écart consigné comme dette DT-004. | risque accepté |
+| S4 | Le cookie de session est inaccessible au JavaScript de la page | Test sur l'attribut `HttpOnly` | L'en-tête `Set-Cookie` de la connexion contient `HttpOnly` (observé avec `curl`, et dans le fichier de cookies : ligne préfixée `#HttpOnly_`). Le test automatisé le vérifie à l'inscription. | conforme |
+| S5 | Le cookie de session n'est pas envoyé par les requêtes émises depuis un autre site | Test sur l'attribut `SameSite` | Le cookie porte `SameSite=Lax` (observé avec `curl`, vérifié par le test). `Lax` autorise l'envoi lors d'une navigation de premier niveau, mais pas lors des requêtes intersites émises par une page tierce ; l'exigence de S15 complète cette protection. | conforme |
+| S6 | Le cookie de session ne circule que sur des connexions chiffrées | Inspection du cookie dans le navigateur ; comportement en local et en production | Sur `http://localhost`, le cookie ne porte pas l'attribut `Secure` : la connexion locale n'est pas chiffrée. Better Auth l'ajoute lorsque l'application est servie en HTTPS, ce qui n'a pas pu être observé : le projet n'est pas déployé dans cette version. À revérifier après le déploiement du TD5. | risque accepté |
+| S7 | Le secret de signature n'est pas versionné, et son absence en production empêche le démarrage | `git grep BETTER_AUTH_SECRET` ; fonction `resolveSecret` | `git grep` ne trouve que le nom de la variable (`.env.example`, `better-auth.ts`), jamais une valeur de production ; la seule valeur présente est celle de développement, nommée comme telle. Vérifié par un test temporaire : l'absence du secret lève une erreur lorsque `NODE_ENV=production` et `VERCEL` sont définis, mais pas pour `next start` en production hors Vercel, où la valeur de développement est utilisée sans avertissement. Cet écart contredit l'exigence telle qu'elle est écrite : il est à corriger. | non conforme |
+| S8 | La connexion ne révèle pas si une adresse est inscrite | Test « répond de la même manière que l'adresse existe ou non » | Le test compare les deux réponses. Observé aussi avec `curl` : pour une adresse connue et une adresse inconnue, la réponse est identique (code 401, `INVALID_EMAIL_OR_PASSWORD`). | conforme |
+| S9 | L'inscription ne révèle pas si une adresse est inscrite | Création d'un compte avec une adresse déjà utilisée | Observé : l'inscription avec une adresse existante renvoie un code 422 `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`, et la page affiche « Cette adresse est déjà utilisée. » L'existence d'un compte est donc révélée. Risque accepté : l'utilisateur doit savoir qu'il ne peut pas utiliser cette adresse, le jeu ne conserve aucune donnée sensible et n'envoie aucun courrier, et la limitation des inscriptions (S3) freine une énumération massive. | risque accepté |
+| S10 | Toute route de l'API réservée aux joueurs refuse une requête anonyme | Tests « Contrôle d'accès à l'API du Village » ; racine de composition | Les tests vérifient les codes 401 pour une lecture et une commande anonymes, et l'absence d'enregistrement ; observé aussi avec `curl` sur le serveur local. La protection est décidée module par module dans la racine de composition (`app.use('/realm/*', requireUser(auth))`) : un nouveau module oublié serait accessible sans connexion. Le risque est maîtrisé en ajoutant un test de contrôle d'accès à chaque module protégé. | conforme |
+| S11 | Un joueur ne peut accéder qu'à ses propres données | Test « isole les villages des joueurs » ; origine de `userId` dans les routes | Le test vérifie que deux joueurs voient chacun leur village. Observé aussi avec deux comptes réels. Les routes du Village lisent l'identifiant dans `c.var.userId`, renseigné par l'intergiciel, et n'acceptent aucun identifiant de joueur dans l'adresse ou le corps de la requête. | conforme |
+| S12 | Les pages du jeu sont protégées sur le serveur, avant tout rendu | Mise en page `app/(jeu)/layout.tsx` ; accès à `/village` sans session | Observé : `/village` et `/` sans cookie reçoivent une redirection 307 vers `/login` calculée sur le serveur. La mise en page est marquée `dynamic = 'force-dynamic'`, et `pnpm build` la signale comme dynamique. | conforme |
+| S13 | Les erreurs imprévues ne révèlent aucun détail technique au client | Gestionnaire `onError` de la racine de composition | Vérifié par un test temporaire : une erreur levée par le port d'authentification produit un code 500 sans le message interne ; la réponse générique est `{ error: { code: 'INTERNAL', message: 'Erreur interne' } }`. Le détail n'est écrit que dans le journal du serveur. | conforme |
+| S14 | La déconnexion invalide la session sur le serveur | Réutilisation d'un cookie après déconnexion | Observé avec `curl` : après `/api/auth/sign-out`, le même cookie reçoit un code 401 sur `/api/realm/village`. | conforme |
+| S15 | Une requête d'authentification accompagnée d'un cookie et émise depuis une autre origine est refusée | Appel de la déconnexion avec un en-tête `origin` étranger | Observé avec `curl` : une origine étrangère reçoit un code 403 `INVALID_ORIGIN`, une requête sans en-tête `origin` un code 403 `MISSING_OR_NULL_ORIGIN`. Le cookie reste valide après ces refus, et la déconnexion avec l'origine de l'application réussit. | conforme |
+
+## Synthèse
+
+Sur quinze exigences, onze sont conformes, une est non conforme (S7) et trois relèvent d'un risque
+accepté (S3, S6, S9).
+
+Actions décidées :
+
+- S3 : la dette DT-004 est ouverte, avec échéance au TD11 ; les compteurs pourraient être déplacés dans
+  la base de données.
+- S6 : à revérifier après le déploiement du TD5, en inspectant l'attribut `Secure` du cookie en HTTPS.
+- S9 : risque accepté en l'état ; à réexaminer si le jeu conserve un jour des données sensibles.
+- S10 : chaque module dont les routes sont réservées aux joueurs reçoit un test de contrôle d'accès.
+- S7 : corriger `resolveSecret` pour qu'il lève l'erreur dès que `NODE_ENV=production`, quel que soit
+  l'hébergeur.
