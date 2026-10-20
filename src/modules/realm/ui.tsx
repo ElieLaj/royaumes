@@ -1,6 +1,7 @@
 'use client'
 import { hc } from 'hono/client'
 import { useCallback, useEffect, useState } from 'react'
+import { useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
 import type { RealmApi } from './api'
 import {
@@ -11,6 +12,7 @@ import {
   type Stock,
   stockAt,
   type VillageView,
+  villageChannel,
 } from './contracts'
 
 /** Client HTTP typé, déduit de la sous-application Hono du module. */
@@ -33,13 +35,20 @@ function canAfford(stock: Stock, cost: Partial<Stock> | null) {
   return !!cost && Object.entries(cost).every(([r, n]) => stock[r as keyof Stock] >= (n ?? 0))
 }
 
+/** Libellé affiché pour chaque état de la connexion temps réel. */
+const STATUS_LABELS = {
+  connecting: 'Connexion...',
+  open: 'Temps réel connecté',
+  reconnecting: 'Reconnexion...',
+} as const
+
 /**
- * Écran du Village : fondation, stock et bâtiments.
+ * Écran du Village : fondation, stock et bâtiments, mis à jour en temps réel.
  * La vue vaut undefined pendant le chargement et null tant qu'aucun village n'est fondé.
- * Le stock est extrapolé localement deux fois par seconde, sans interroger le serveur ;
- * le bouton d'amélioration n'est qu'un confort, la règle étant appliquée par le domaine.
+ * Chaque événement du canal, y compris s'il vient d'un autre onglet ou appareil, provoque
+ * une relecture de la vue ; entre deux, le stock est extrapolé localement.
  */
-export function VillageScreen() {
+export function VillageScreen({ userId }: { userId: string }) {
   const [view, setView] = useState<VillageView | null | undefined>(undefined)
   const [now, setNow] = useState(() => Date.now())
   const [error, setError] = useState<string | null>(null)
@@ -52,6 +61,8 @@ export function VillageScreen() {
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  const status = useChannel(villageChannel(userId), refresh)
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 500)
@@ -76,9 +87,14 @@ export function VillageScreen() {
   }
 
   const title = (
-    <h1>
-      <Entity kind="village" /> {view?.name ?? 'Royaumes'}
-    </h1>
+    <div className="row" style={{ justifyContent: 'space-between' }}>
+      <h1>
+        <Entity kind="village" /> {view?.name ?? 'Royaumes'}
+      </h1>
+      <span className="status" data-status={status}>
+        {STATUS_LABELS[status]}
+      </span>
+    </div>
   )
 
   if (view === undefined) return title
