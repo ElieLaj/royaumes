@@ -19,6 +19,7 @@ export function createEventStoreGameRepository(store: EventStore): GameRepositor
       await store.append(gameChannel(gameId), expectedVersion, events as unknown as NewEvent[])
     },
 
+    /** DETTE TECHNIQUE DT-005 (docs/qualite/dette-technique.md) : liste recalculée depuis tout le journal. */
     async listOpenGames(now) {
       const stored = await store.readAll({
         streamPrefix: GAME_CHANNEL_PREFIX,

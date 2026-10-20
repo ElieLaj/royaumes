@@ -254,6 +254,7 @@ function decideCommand(state: GameState, command: GameCommand, now: number): Dec
       }
 
     case 'OpenDoor': {
+      /** DETTE TECHNIQUE DT-006 (docs/qualite/dette-technique.md) : exploration sans échéance. */
       if (state.phase !== 'exploring') return fail({ code: 'WRONG_PHASE', phase: state.phase })
       if (!isMember(state, command.playerId)) return fail({ code: 'NOT_A_MEMBER' })
       if (state.heroes[state.turn].id !== command.playerId) return fail({ code: 'NOT_YOUR_TURN' })
