@@ -2,7 +2,7 @@
  * État et événements d'une expédition, et fonction evolve.
  * Les règles du jeu (decide) se trouvent dans rules.ts, la vue de chaque joueur dans view.ts.
  */
-import type { MonsterKind } from './content'
+import { DEFAULT_DIFFICULTY, type Difficulty, type MonsterKind } from './content'
 
 /** Phase d'une expédition. */
 export type Phase = 'lobby' | 'exploring' | 'combat' | 'won' | 'lost'
@@ -59,6 +59,8 @@ export interface GameState {
   /** Faux tant que l'expédition n'a pas été ouverte. */
   exists: boolean
   hostId: string
+  /** Niveau de difficulté, qui détermine la stratégie des monstres. */
+  difficulty: Difficulty
   /** Graine du hasard de l'expédition : information secrète, jamais transmise aux joueurs. */
   seed: number
   phase: Phase
@@ -87,6 +89,7 @@ export interface GameState {
 export const initialState: GameState = {
   exists: false,
   hostId: '',
+  difficulty: DEFAULT_DIFFICULTY,
   seed: 0,
   phase: 'lobby',
   heroes: [],
@@ -104,7 +107,15 @@ export const initialState: GameState = {
 export type GameEvent =
   | {
       type: 'GameCreated'
-      data: { hostId: string; hostName: string; hero: HeroSpec; seed: number; at: number }
+      data: {
+        hostId: string
+        hostName: string
+        hero: HeroSpec
+        /** Facultatif : absent des événements enregistrés avant le TD7. */
+        difficulty?: Difficulty
+        seed: number
+        at: number
+      }
     }
   | { type: 'PlayerJoined'; data: { playerId: string; name: string; hero: HeroSpec; at: number } }
   | { type: 'GameStarted'; data: { rooms: Room[]; at: number } }
@@ -185,6 +196,7 @@ export function evolve(state: GameState, event: GameEvent): GameState {
         ...initialState,
         exists: true,
         hostId: event.data.hostId,
+        difficulty: event.data.difficulty ?? DEFAULT_DIFFICULTY,
         seed: event.data.seed,
         heroes: [newHero(event.data.hostId, event.data.hostName, event.data.hero)],
       }
