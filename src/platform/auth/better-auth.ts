@@ -35,6 +35,10 @@ export function createBetterAuth(db: Db): AuthPort {
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
     secret: resolveSecret(),
     baseURL: resolveBaseUrl(),
+    /**
+     * DETTE TECHNIQUE DT-004 (docs/qualite/dette-technique.md) : les compteurs sont conservés
+     * dans la mémoire de chaque instance, et ne sont donc pas partagés entre instances.
+     */
     rateLimit: {
       enabled: process.env.AUTH_RATE_LIMIT !== 'off' || Boolean(process.env.VERCEL),
       customRules: {
