@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
-import type { EventStore } from '../event-store/event-store'
+import type { EventStore, StoredEvent } from '../event-store/event-store'
 import type { AppEnv } from '../http/types'
-import { type ChannelPolicy, isAllowed } from './channel-policy'
+import { authorize, type ChannelPolicy } from './channel-policy'
 
 export interface RealtimeOptions {
   /** Journal d'événements : un canal correspond à un flux du journal. */
@@ -22,6 +22,12 @@ export interface RealtimeOptions {
 /** Réponse commune aux deux routes lorsque le canal n'est pas autorisé. */
 const FORBIDDEN = { error: { code: 'FORBIDDEN', message: 'Canal non autorisé' } } as const
 
+/** Forme transmise d'un événement : sur un canal discret, ses données sont retirées. */
+function present(event: StoredEvent, policy: ChannelPolicy) {
+  if (!policy.redact) return event
+  return { stream: event.stream, version: event.version, type: event.type, data: {} }
+}
+
 /**
  * Sous-application du temps réel, montée sur /api/stream.
  * Le flux ne conserve aucun état en mémoire : il relit le journal, et n'importe quelle
@@ -40,7 +46,8 @@ export function createRealtimeApi({
   return new Hono<AppEnv>()
     .get('/:channel', async (c) => {
       const channel = c.req.param('channel')
-      if (!(await isAllowed(policies, channel, c.var.userId))) return c.json(FORBIDDEN, 403)
+      const policy = await authorize(policies, channel, c.var.userId)
+      if (!policy) return c.json(FORBIDDEN, 403)
 
       let lastVersion = Number(c.req.header('last-event-id') ?? c.req.query('after') ?? 0) || 0
 
@@ -60,7 +67,7 @@ export function createRealtimeApi({
             await stream.writeSSE({
               id: String(event.version),
               event: 'domain-event',
-              data: JSON.stringify(event),
+              data: JSON.stringify(present(event, policy)),
             })
             lastVersion = event.version
             lastWrite = Date.now()
@@ -76,8 +83,10 @@ export function createRealtimeApi({
 
     .get('/:channel/events', async (c) => {
       const channel = c.req.param('channel')
-      if (!(await isAllowed(policies, channel, c.var.userId))) return c.json(FORBIDDEN, 403)
+      const policy = await authorize(policies, channel, c.var.userId)
+      if (!policy) return c.json(FORBIDDEN, 403)
       const after = Number(c.req.query('after') ?? 0) || 0
-      return c.json({ events: await store.read(channel, after) })
+      const events = await store.read(channel, after)
+      return c.json({ events: events.map((event) => present(event, policy)) })
     })
 }

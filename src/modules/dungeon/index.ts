@@ -4,8 +4,10 @@
  * importé depuis l'extérieur.
  */
 import type { EventStore } from '@/platform/event-store/event-store'
+import type { ChannelPolicy } from '@/platform/realtime/channel-policy'
 import { createDungeonApi } from './api'
 import { createDungeonService } from './application/dungeon-service'
+import { GAME_CHANNEL_PREFIX } from './contracts'
 import { createEventStoreGameRepository } from './infrastructure/event-store-game-repository'
 
 export interface DungeonModuleDeps {
@@ -15,11 +17,22 @@ export interface DungeonModuleDeps {
   clock?: () => number
 }
 
-/** Fabrique du module : assemble l'adaptateur, le service et l'API. */
+/** Fabrique du module : assemble l'adaptateur, le service, l'API et la règle des canaux. */
 export function createDungeonModule({ store, clock }: DungeonModuleDeps) {
   const repo = createEventStoreGameRepository(store)
   const service = createDungeonService(repo, { clock })
-  return { api: createDungeonApi(service) }
+
+  const channelPolicy: ChannelPolicy = {
+    prefix: GAME_CHANNEL_PREFIX,
+    redact: true,
+    canSubscribe: async (channel, userId) => {
+      const gameId = channel.slice(GAME_CHANNEL_PREFIX.length)
+      const view = await service.getView(gameId, userId)
+      return view?.isMember ?? false
+    },
+  }
+
+  return { api: createDungeonApi(service), channelPolicy }
 }
 
 export type { DungeonApi } from './api'
