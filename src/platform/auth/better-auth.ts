@@ -4,9 +4,34 @@ import type { Db } from '../db/client'
 import type { AuthPort } from './port'
 import { account, session, user, verification } from './schema'
 
-/** Adresse publique de l'application : celle de BETTER_AUTH_URL, ou l'adresse locale. */
+/**
+ * Domaines attribués par Vercel au déploiement en cours : production, branche et déploiement.
+ * Vercel les fournit par des variables d'environnement, sans le préfixe https://.
+ */
+function vercelOrigins(): string[] {
+  return [
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_BRANCH_URL,
+    process.env.VERCEL_URL,
+  ]
+    .filter((host): host is string => Boolean(host))
+    .map((host) => `https://${host}`)
+}
+
+/**
+ * Adresse publique de l'application.
+ * 1. BETTER_AUTH_URL, si elle est définie ;
+ * 2. en production sur Vercel, le domaine de production du projet ;
+ * 3. sur un autre déploiement Vercel (aperçu d'une branche), le domaine de ce déploiement ;
+ * 4. en local, http://localhost:3000.
+ */
 function resolveBaseUrl(): string {
-  return process.env.BETTER_AUTH_URL ?? 'http://localhost:3000'
+  if (process.env.BETTER_AUTH_URL) return process.env.BETTER_AUTH_URL
+  if (process.env.VERCEL_ENV === 'production' && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+  }
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`
+  return 'http://localhost:3000'
 }
 
 /**
@@ -35,6 +60,8 @@ export function createBetterAuth(db: Db): AuthPort {
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
     secret: resolveSecret(),
     baseURL: resolveBaseUrl(),
+    /** Origines autorisées : seules les adresses de ce projet peuvent envoyer le cookie de session. */
+    trustedOrigins: [resolveBaseUrl(), ...vercelOrigins()],
     /**
      * DETTE TECHNIQUE DT-004 (docs/qualite/dette-technique.md) : les compteurs sont conservés
      * dans la mémoire de chaque instance, et ne sont donc pas partagés entre instances.
