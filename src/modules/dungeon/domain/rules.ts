@@ -4,12 +4,14 @@
  * Tout le hasard du jeu est tiré ici, avec un générateur à graine, et enregistré
  * dans les événements : evolve (game.ts) ne fait qu'appliquer les résultats.
  */
+import { chooseCompanionAction } from './companion'
 import {
   BOSS,
   COMMON_MONSTERS,
   DAMAGE_SPREAD,
   type Difficulty,
   DUNGEON_LENGTH,
+  EXPLORE_MS,
   HEAL_AMOUNT,
   HERO,
   MAX_HEROES,
@@ -31,6 +33,7 @@ import {
   type Room,
   standingHeroes,
   standingMonsters,
+  standingPlayerHeroes,
 } from './game'
 import { MONSTER_STRATEGIES } from './monster-strategies'
 import { mix, pick, type Random, randomInt, seeded } from './random'
@@ -38,6 +41,7 @@ import { mix, pick, type Random, randomInt, seeded } from './random'
 export type GameCommand =
   | { type: 'CreateGame'; playerId: string; name: string; difficulty: Difficulty; seed: number }
   | { type: 'JoinGame'; playerId: string; name: string }
+  | { type: 'AddCompanion'; playerId: string }
   | { type: 'StartGame'; playerId: string }
   | { type: 'OpenDoor'; playerId: string }
   | { type: 'SubmitAction'; playerId: string; round: number; action: Action }
@@ -110,7 +114,9 @@ export function resolveRound(state: GameState, at: number): GameEvent[] {
 
   const actions: Record<string, Action> = {}
   for (const hero of standingHeroes(state)) {
-    actions[hero.id] = state.choices[hero.id] ?? { type: 'defend' }
+    actions[hero.id] = hero.companion
+      ? chooseCompanionAction({ heroes: standingHeroes(state), monsters: standingMonsters(state) })
+      : (state.choices[hero.id] ?? { type: 'defend' })
   }
 
   let heroes = state.heroes
@@ -150,9 +156,11 @@ export function resolveRound(state: GameState, at: number): GameEvent[] {
     record({ kind: 'damage', source: monster.id, target: target.id, amount })
   }
 
-  const heroesLeft = heroes.some((hero) => hero.hp > 0)
+  const playersLeft = heroes.some((hero) => hero.hp > 0 && !hero.companion)
   const monstersLeft = monsters.some((monster) => monster.hp > 0)
-  const combatGoesOn = heroesLeft && monstersLeft
+  const combatGoesOn = playersLeft && monstersLeft
+  const lastRoom = state.room === DUNGEON_LENGTH - 1
+  const explorationGoesOn = playersLeft && !monstersLeft && !lastRoom
   const events: GameEvent[] = [
     {
       type: 'RoundResolved',
@@ -161,13 +169,13 @@ export function resolveRound(state: GameState, at: number): GameEvent[] {
         actions,
         effects,
         nextDeadline: combatGoesOn ? at + ROUND_MS : null,
+        exploreDeadline: explorationGoesOn ? at + EXPLORE_MS : null,
         at,
       },
     },
   ]
-  const lastRoom = state.room === DUNGEON_LENGTH - 1
-  if (!heroesLeft || (!monstersLeft && lastRoom)) {
-    const result = heroesLeft ? 'won' : 'lost'
+  if (!playersLeft || (!monstersLeft && lastRoom)) {
+    const result = playersLeft ? 'won' : 'lost'
     const heroIds = state.heroes.map((hero) => hero.id)
     events.push({ type: 'GameEnded', data: { result, loot: state.loot, heroIds, at } })
   }
@@ -175,17 +183,34 @@ export function resolveRound(state: GameState, at: number): GameEvent[] {
 }
 
 /**
- * Échéances paresseuses : renvoie les événements de résolution de toutes les manches
- * dont l'échéance est passée à l'instant now. Chaque manche échue est résolue à l'instant
- * de son échéance, et non à l'instant now : le résultat ne dépend pas du moment du calcul.
+ * Ouverture de la porte suivante par un héros, à l'instant at. L'échéance enregistrée est
+ * celle de la première manche si la salle abrite des monstres, sinon celle du tour suivant.
+ */
+function enterNextRoom(state: GameState, heroId: string, at: number): GameEvent {
+  const room = state.room + 1
+  const fight = state.rooms[room].kind === 'monsters'
+  const deadline = at + (fight ? ROUND_MS : EXPLORE_MS)
+  return { type: 'RoomEntered', data: { heroId, room, deadline, at } }
+}
+
+/**
+ * Échéances paresseuses : renvoie les événements de toutes les échéances passées à l'instant
+ * now. Une manche échue est résolue ; un tour d'exploration échu ouvre la porte au nom du héros
+ * dont c'était le tour. Chaque échéance est traitée à son propre instant, et non à l'instant
+ * now : le résultat ne dépend pas du moment du calcul.
  */
 export function settle(state: GameState, now: number): GameEvent[] {
   const events: GameEvent[] = []
   let current = state
-  while (current.phase === 'combat' && current.deadline !== null && current.deadline <= now) {
-    const resolution = resolveRound(current, current.deadline)
-    events.push(...resolution)
-    current = resolution.reduce(evolve, current)
+  while (current.deadline !== null && current.deadline <= now) {
+    const at = current.deadline
+    let due: GameEvent[]
+    if (current.phase === 'combat') due = resolveRound(current, at)
+    else if (current.phase === 'exploring')
+      due = [enterNextRoom(current, current.heroes[current.turn].id, at)]
+    else break
+    events.push(...due)
+    current = due.reduce(evolve, current)
   }
   return events
 }
@@ -197,8 +222,9 @@ export function decide(state: GameState, command: GameCommand, now: number): Dec
   return decision.ok ? { ok: true, events: [...due, ...decision.events] } : decision
 }
 
+/** Un membre est un joueur qui incarne un héros de l'expédition ; un compagnon n'en est pas un. */
 const isMember = (state: GameState, playerId: string) =>
-  state.heroes.some((hero) => hero.id === playerId)
+  state.heroes.some((hero) => hero.id === playerId && !hero.companion)
 
 function decideCommand(state: GameState, command: GameCommand, now: number): Decision {
   if (command.type === 'CreateGame') {
@@ -232,6 +258,27 @@ function decideCommand(state: GameState, command: GameCommand, now: number): Dec
         ],
       }
 
+    case 'AddCompanion': {
+      if (state.phase !== 'lobby') return fail({ code: 'WRONG_PHASE', phase: state.phase })
+      if (command.playerId !== state.hostId) return fail({ code: 'NOT_HOST' })
+      if (state.heroes.length >= MAX_HEROES) return fail({ code: 'GAME_FULL' })
+      const number = state.heroes.filter((hero) => hero.companion).length + 1
+      return {
+        ok: true,
+        events: [
+          {
+            type: 'CompanionAdded',
+            data: {
+              companionId: `companion-${number}`,
+              name: `Compagnon ${number}`,
+              hero: { ...HERO },
+              at: now,
+            },
+          },
+        ],
+      }
+    }
+
     case 'StartGame':
       if (state.phase !== 'lobby') return fail({ code: 'WRONG_PHASE', phase: state.phase })
       if (command.playerId !== state.hostId) return fail({ code: 'NOT_HOST' })
@@ -240,30 +287,26 @@ function decideCommand(state: GameState, command: GameCommand, now: number): Dec
         events: [
           {
             type: 'GameStarted',
-            data: { rooms: generateRooms(state.seed, state.heroes.length), at: now },
+            data: {
+              rooms: generateRooms(state.seed, state.heroes.length),
+              deadline: now + EXPLORE_MS,
+              at: now,
+            },
           },
         ],
       }
 
     case 'OpenDoor': {
-      /** DETTE TECHNIQUE DT-006 (docs/qualite/dette-technique.md) : exploration sans échéance. */
       if (state.phase !== 'exploring') return fail({ code: 'WRONG_PHASE', phase: state.phase })
       if (!isMember(state, command.playerId)) return fail({ code: 'NOT_A_MEMBER' })
       if (state.heroes[state.turn].id !== command.playerId) return fail({ code: 'NOT_YOUR_TURN' })
-      const room = state.room + 1
-      const deadline = state.rooms[room].kind === 'monsters' ? now + ROUND_MS : null
-      return {
-        ok: true,
-        events: [
-          { type: 'RoomEntered', data: { heroId: command.playerId, room, deadline, at: now } },
-        ],
-      }
+      return { ok: true, events: [enterNextRoom(state, command.playerId, now)] }
     }
 
     case 'SubmitAction': {
       if (state.phase !== 'combat') return fail({ code: 'WRONG_PHASE', phase: state.phase })
       const hero = state.heroes.find((candidate) => candidate.id === command.playerId)
-      if (!hero) return fail({ code: 'NOT_A_MEMBER' })
+      if (!hero || hero.companion) return fail({ code: 'NOT_A_MEMBER' })
       if (hero.hp <= 0) return fail({ code: 'HERO_DOWN' })
       if (command.round !== state.round) return fail({ code: 'ROUND_OVER', round: state.round })
       if (state.choices[hero.id]) return fail({ code: 'ALREADY_CHOSEN' })
@@ -274,7 +317,9 @@ function decideCommand(state: GameState, command: GameCommand, now: number): Dec
         data: { heroId: hero.id, round: state.round, action: command.action, at: now },
       }
       const after = evolve(state, submitted)
-      const everyoneReady = standingHeroes(after).every((h) => after.choices[h.id] !== undefined)
+      const everyoneReady = standingPlayerHeroes(after).every(
+        (h) => after.choices[h.id] !== undefined,
+      )
       return {
         ok: true,
         events: everyoneReady ? [submitted, ...resolveRound(after, now)] : [submitted],
