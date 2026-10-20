@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { createDungeonModule } from '@/modules/dungeon'
 import { createRealmModule } from '@/modules/realm'
 import { createSystemModule } from '@/modules/system'
 import type { AuthPort } from '@/platform/auth/port'
@@ -32,6 +33,7 @@ export function createApi({ auth, store, ready, clock, realtime }: ApiDeps) {
   //    journal d'événements, authentification) leur seront fournies ici.
   const system = createSystemModule()
   const realm = createRealmModule({ store, clock })
+  const dungeon = createDungeonModule({ store, clock })
 
   /** Règles d'accès aux canaux temps réel, déclarées par les modules. */
   const policies: ChannelPolicy[] = [realm.channelPolicy]
@@ -60,6 +62,7 @@ export function createApi({ auth, store, ready, clock, realtime }: ApiDeps) {
 
   /** Routes réservées aux joueurs connectés : tout module protégé doit être ajouté ici. */
   app.use('/realm/*', requireUser(auth))
+  app.use('/dungeon/*', requireUser(auth))
   app.use('/stream/*', requireUser(auth))
 
   // 4. Montage des sous-applications : chaque module reçoit son propre préfixe.
@@ -67,6 +70,7 @@ export function createApi({ auth, store, ready, clock, realtime }: ApiDeps) {
   return app
     .route('/system', system.api)
     .route('/realm', realm.api)
+    .route('/dungeon', dungeon.api)
     .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
 
