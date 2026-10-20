@@ -25,7 +25,12 @@ type TestUser = string | null
 export async function createTestApi() {
   let now = Date.UTC(2026, 0, 1)
   const store = createEventStore(await createTestDatabase())
-  const api = createApi({ auth: testAuth, store, clock: () => now })
+  const api = createApi({
+    auth: testAuth,
+    store,
+    clock: () => now,
+    realtime: { pollMs: 20, maxStreamMs: 150 },
+  })
 
   /** En-têtes identifiant le joueur, ou aucun en-tête pour une requête anonyme. */
   const as = (user: TestUser): Record<string, string> => (user ? { 'x-test-user': user } : {})
