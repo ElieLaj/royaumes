@@ -56,11 +56,12 @@ module.exports = {
       // Les importations de types sont autorisées : elles disparaissent à la compilation.
       name: 'client-without-server-code',
       comment:
-        "Le code client (ui.tsx, src/ui) n'importe jamais de code serveur ; seuls les types sont autorisés.",
+        "Le code client (ui.tsx, src/ui) n'importe jamais de code serveur ; seuls les types sont autorisés. Seule exception : le client d'authentification (src/platform/auth/client.ts), écrit pour le navigateur.",
       severity: 'error',
       from: { path: '(^src/modules/[^/]+/ui\\.tsx$)|(^src/ui/)' },
       to: {
         path: '^src/(platform/|bootstrap/|modules/[^/]+/(api\\.ts|index\\.ts|application/|infrastructure/))',
+        pathNot: '^src/platform/auth/client\\.ts$',
         dependencyTypesNot: ['type-only'],
       },
     },
