@@ -1,11 +1,14 @@
 import { Hono } from 'hono'
 import { createDungeonModule } from '@/modules/dungeon'
+import { createRankingModule } from '@/modules/ranking'
 import { createRealmModule } from '@/modules/realm'
 import { createSystemModule } from '@/modules/system'
 import type { AuthPort } from '@/platform/auth/port'
+import type { Db } from '@/platform/db/client'
 import type { EventStore } from '@/platform/event-store/event-store'
 import { requireUser } from '@/platform/http/require-user'
 import type { AppEnv } from '@/platform/http/types'
+import { createProjectionRunner } from '@/platform/projection/projection'
 import type { ChannelPolicy } from '@/platform/realtime/channel-policy'
 import { createRealtimeApi, type RealtimeOptions } from '@/platform/realtime/stream-api'
 
@@ -13,6 +16,8 @@ import { createRealtimeApi, type RealtimeOptions } from '@/platform/realtime/str
 export interface ApiDeps {
   /** Authentification : Better Auth en fonctionnement réel, un adaptateur simplifié en test. */
   auth: AuthPort
+  /** Base de données, dans laquelle les modules tiennent leurs modèles de lecture. */
+  db: Db
   /** Journal d'événements, transmis aux modules qui l'utilisent. */
   store: EventStore
   /** Attendue avant chaque requête : résolue lorsque la base est prête (migrations). */
@@ -28,12 +33,15 @@ export interface ApiDeps {
  * la plateforme technique et l'ensemble des modules.
  * Ajouter un module consiste à l'instancier ici, puis à monter son API.
  */
-export function createApi({ auth, store, ready, clock, realtime }: ApiDeps) {
+export function createApi({ auth, db, store, ready, clock, realtime }: ApiDeps) {
+  const projections = createProjectionRunner(db)
+
   // 1. Instanciation des modules. Leurs dépendances (base de données,
   //    journal d'événements, authentification) leur seront fournies ici.
   const system = createSystemModule()
   const realm = createRealmModule({ store, clock })
   const dungeon = createDungeonModule({ store, clock })
+  const ranking = createRankingModule({ db, projections })
 
   /** Règles d'accès aux canaux temps réel, déclarées par les modules. */
   const policies: ChannelPolicy[] = [realm.channelPolicy, dungeon.channelPolicy]
@@ -63,6 +71,7 @@ export function createApi({ auth, store, ready, clock, realtime }: ApiDeps) {
   /** Routes réservées aux joueurs connectés : tout module protégé doit être ajouté ici. */
   app.use('/realm/*', requireUser(auth))
   app.use('/dungeon/*', requireUser(auth))
+  app.use('/ranking/*', requireUser(auth))
   app.use('/stream/*', requireUser(auth))
 
   // 4. Montage des sous-applications : chaque module reçoit son propre préfixe.
@@ -71,6 +80,7 @@ export function createApi({ auth, store, ready, clock, realtime }: ApiDeps) {
     .route('/system', system.api)
     .route('/realm', realm.api)
     .route('/dungeon', dungeon.api)
+    .route('/ranking', ranking.api)
     .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
 
