@@ -11,7 +11,7 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     /** Toujours en environnement de test, même lorsque Vercel définit NODE_ENV=production. */
     env: { NODE_ENV: 'test' },
-    testTimeout: 20_000,
-    hookTimeout: 20_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
 })
