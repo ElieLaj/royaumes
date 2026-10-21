@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { describeError } from '../http/describe-error'
 import type { AppEnv } from '../http/types'
 
 /** Tâche quotidienne : elle renvoie un compte rendu de son exécution, par exemple des nombres. */
@@ -26,7 +27,7 @@ export function createCronApi(tasks: Record<string, DailyTask>, secret: string |
       try {
         reports[name] = { ok: true, result: await task() }
       } catch (error) {
-        reports[name] = { ok: false, error: error instanceof Error ? error.message : String(error) }
+        reports[name] = { ok: false, error: describeError(error) }
       }
     }
     return c.json(reports)

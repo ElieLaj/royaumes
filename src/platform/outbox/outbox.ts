@@ -1,5 +1,6 @@
 import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
+import { describeError } from '../http/describe-error'
 import { outbox } from './schema'
 
 /** Message à enregistrer dans la boîte d'envoi, avec les événements qui le produisent. */
@@ -146,7 +147,7 @@ export function createDispatcher(
         .update(outbox)
         .set({
           availableAt: new Date(now() + retryDelayMs(message.attempt)),
-          lastError: error instanceof Error ? error.message : String(error),
+          lastError: describeError(error),
         })
         .where(eq(outbox.id, message.id))
       return false

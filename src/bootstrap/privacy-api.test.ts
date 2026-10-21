@@ -168,5 +168,6 @@ describe('Droits des joueurs - durée de conservation', () => {
     const reports = await res.json()
     expect(reports.tavern).toEqual({ ok: true, result: { messages: 2, presence: 1 } })
     expect(reports.outbox.ok).toBe(true)
+    expect(reports.identity).toEqual({ ok: true, result: { sessions: 0 } })
   })
 })

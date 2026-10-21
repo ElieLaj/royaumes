@@ -7,9 +7,11 @@ import { createSystemModule } from '@/modules/system'
 import { createTavernModule } from '@/modules/tavern'
 import { createIdentityPersonalData } from '@/platform/auth/personal-data'
 import type { AuthPort } from '@/platform/auth/port'
+import { purgeExpiredSessions } from '@/platform/auth/sessions'
 import { createCronApi } from '@/platform/cron/cron-api'
 import type { Db } from '@/platform/db/client'
 import type { EventStore } from '@/platform/event-store/event-store'
+import { describeError } from '@/platform/http/describe-error'
 import { requireUser } from '@/platform/http/require-user'
 import type { AppEnv } from '@/platform/http/types'
 import { createInboxApi } from '@/platform/outbox/inbox-api'
@@ -123,8 +125,7 @@ export function createApi({
   // 3. Toute erreur non prévue produit une réponse JSON uniforme,
   //    sans divulguer de détail technique au client.
   app.onError((error, c) => {
-    /** DETTE TECHNIQUE DT-009 (docs/qualite/dette-technique.md) : l'erreur est journalisée en entier, paramètres de la requête compris. */
-    console.error(error)
+    console.error(describeError(error))
     return c.json({ error: { code: 'INTERNAL', message: 'Erreur interne' } }, 500)
   })
 
@@ -148,6 +149,7 @@ export function createApi({
           return result
         },
         tavern: tavern.dailyTask,
+        identity: () => purgeExpiredSessions(db, clock?.()),
         ...(remoteRealm ? { realm: remoteRealm.dailyTask } : {}),
       },
       cronSecret,

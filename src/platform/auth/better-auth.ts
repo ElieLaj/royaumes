@@ -58,7 +58,6 @@ export function createBetterAuth(db: Db): AuthPort {
       provider: 'pg',
       schema: { user, session, account, verification, rateLimit },
     }),
-    /** DETTE TECHNIQUE DT-008 (docs/qualite/dette-technique.md) : une session expirée n'est supprimée que si son cookie est présenté de nouveau. */
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
     secret: resolveSecret(),
     baseURL: resolveBaseUrl(),
