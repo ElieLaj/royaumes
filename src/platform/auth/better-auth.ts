@@ -2,7 +2,7 @@ import { betterAuth } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
 import type { Db } from '../db/client'
 import type { AuthPort } from './port'
-import { account, session, user, verification } from './schema'
+import { account, rateLimit, session, user, verification } from './schema'
 
 /**
  * Domaines attribués par Vercel au déploiement en cours : production, branche et déploiement.
@@ -55,7 +55,7 @@ export function createBetterAuth(db: Db): AuthPort {
   const auth = betterAuth({
     database: drizzleAdapter(db, {
       provider: 'pg',
-      schema: { user, session, account, verification },
+      schema: { user, session, account, verification, rateLimit },
     }),
     /** DETTE TECHNIQUE DT-008 (docs/qualite/dette-technique.md) : une session expirée n'est supprimée que si son cookie est présenté de nouveau. */
     emailAndPassword: { enabled: true, minPasswordLength: 8 },
@@ -64,11 +64,13 @@ export function createBetterAuth(db: Db): AuthPort {
     /** Origines autorisées : seules les adresses de ce projet peuvent envoyer le cookie de session. */
     trustedOrigins: [resolveBaseUrl(), ...vercelOrigins()],
     /**
-     * DETTE TECHNIQUE DT-004 (docs/qualite/dette-technique.md) : les compteurs sont conservés
-     * dans la mémoire de chaque instance, et ne sont donc pas partagés entre instances.
+     * Limitation des tentatives : les compteurs sont conservés dans la base, et partagés par
+     * toutes les instances. Chaque tentative est comptée par une mise à jour conditionnelle,
+     * sûre en cas d'accès simultanés.
      */
     rateLimit: {
       enabled: process.env.AUTH_RATE_LIMIT !== 'off' || Boolean(process.env.VERCEL),
+      storage: 'database',
       customRules: {
         '/sign-up/email': { window: 60, max: 40 },
         '/sign-in/email': { window: 60, max: 60 },

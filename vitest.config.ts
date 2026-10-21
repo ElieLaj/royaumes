@@ -15,5 +15,13 @@ export default defineConfig({
     hookTimeout: 60_000,
     /** Chaque processus charge PGlite, en WebAssembly : trop de processus simultanés épuisent la mémoire. */
     maxWorkers: 4,
+    /** Couverture du code du projet par les tests, hors tests eux-mêmes ; mesurée par pnpm test:coverage. */
+    coverage: {
+      provider: 'v8',
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: ['src/**/*.test.ts'],
+      reporter: ['text-summary', 'html'],
+      reportsDirectory: 'coverage',
+    },
   },
 })

@@ -73,6 +73,16 @@ module.exports = {
       from: {},
       to: { circular: true },
     },
+    {
+      // Règle 6 : seule la plateforme lit et écrit ses tables (journal, boîte d'envoi, points
+      // de reprise, registre des effacements) ; un module passe par ses fonctions.
+      name: 'platform-tables-are-private',
+      comment:
+        "Un module n'importe jamais les tables de la plateforme : il passe par ses fonctions.",
+      severity: 'error',
+      from: { path: '^src/modules/' },
+      to: { path: '^src/platform/[^/]+/schema\\.ts$' },
+    },
   ],
   options: {
     // Les paquets installés ne sont pas analysés.

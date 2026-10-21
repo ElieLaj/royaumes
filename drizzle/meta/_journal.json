@@ -85,6 +85,13 @@
       "when": 1792578073268,
       "tag": "0011_registre_effacements",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792586781793,
+      "tag": "0012_limitation_partagee",
+      "breakpoints": true
     }
   ]
 }

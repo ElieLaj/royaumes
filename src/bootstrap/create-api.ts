@@ -129,8 +129,14 @@ export function createApi({
     '/cron',
     createCronApi(
       {
-        /** DETTE TECHNIQUE DT-007 (docs/qualite/dette-technique.md) : messages abandonnés seulement comptés. */
-        outbox: async () => ({ ...(await dispatcher.dispatch()), ...(await dispatcher.status()) }),
+        /** Des messages abandonnés produisent un avertissement : ils demandent un examen, par scripts/dead-letters.ts. */
+        outbox: async () => {
+          const result = { ...(await dispatcher.dispatch()), ...(await dispatcher.status()) }
+          if (result.abandoned > 0) {
+            console.warn(`Boîte d'envoi : ${result.abandoned} message(s) abandonné(s) à examiner`)
+          }
+          return result
+        },
         tavern: tavern.dailyTask,
       },
       cronSecret,
