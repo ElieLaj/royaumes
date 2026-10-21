@@ -3,11 +3,7 @@ import type { Db } from '@/platform/db/client'
 import type { PresenceRepository } from '../application/presence-repository'
 import { presence } from './schema'
 
-/**
- * Adaptateur du port PresenceRepository, fondé sur la table tavern.presence.
- * Le signal est une seule instruction INSERT ... ON CONFLICT DO UPDATE : deux signaux
- * simultanés d'un même joueur ne peuvent pas créer deux lignes.
- */
+/** Adaptateur du port PresenceRepository, fondé sur la table tavern.presence. */
 export function createDrizzlePresenceRepository(db: Db): PresenceRepository {
   return {
     async touch(player, at) {
@@ -25,7 +21,11 @@ export function createDrizzlePresenceRepository(db: Db): PresenceRepository {
     },
 
     async removeStale(before) {
-      await db.delete(presence).where(lt(presence.lastSeen, before))
+      const removed = await db
+        .delete(presence)
+        .where(lt(presence.lastSeen, before))
+        .returning({ id: presence.playerId })
+      return removed.length
     },
 
     list() {

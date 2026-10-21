@@ -10,6 +10,7 @@ import { createTavernService } from './application/tavern-service'
 import { MESSAGE_POSTED, TAVERN_CHANNEL } from './contracts'
 import { createDrizzleMessageRepository } from './infrastructure/drizzle-message-repository'
 import { createDrizzlePresenceRepository } from './infrastructure/drizzle-presence-repository'
+import { createTavernPersonalData } from './personal-data'
 
 export interface TavernModuleDeps {
   /** Base de données, dans laquelle la Taverne tient ses tables. */
@@ -21,7 +22,7 @@ export interface TavernModuleDeps {
 /** Nombre maximal de messages transmis à la fois par le canal. */
 const CHANNEL_BATCH = 100
 
-/** Fabrique du module : assemble l'adaptateur, le service, l'API et la règle du canal. */
+/** Fabrique du module : assemble les adaptateurs, le service, l'API et la règle du canal. */
 export function createTavernModule({ db, clock }: TavernModuleDeps) {
   const repo = createDrizzleMessageRepository(db)
   const service = createTavernService(repo, createDrizzlePresenceRepository(db), clock)
@@ -51,7 +52,12 @@ export function createTavernModule({ db, clock }: TavernModuleDeps) {
     },
   }
 
-  return { api: createTavernApi(service), channelPolicy }
+  return {
+    api: createTavernApi(service),
+    channelPolicy,
+    dailyTask: service.purge,
+    personalData: createTavernPersonalData(db),
+  }
 }
 
 export type { TavernApi } from './api'

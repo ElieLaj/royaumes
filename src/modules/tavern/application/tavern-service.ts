@@ -1,5 +1,11 @@
 import type { PresentPlayer, TavernMessage } from '../contracts'
-import { checkBody, checkRate, type MessageError, RATE_LIMIT } from '../domain/message'
+import {
+  checkBody,
+  checkRate,
+  expiredBefore,
+  type MessageError,
+  RATE_LIMIT,
+} from '../domain/message'
 import { staleBefore } from '../domain/presence'
 import type { MessageRepository } from './message-repository'
 import type { PresenceRepository } from './presence-repository'
@@ -9,11 +15,7 @@ export const HISTORY_SIZE = 50
 
 export type PostResult = { ok: true; message: TavernMessage } | { ok: false; error: MessageError }
 
-/**
- * Service applicatif de la Taverne. La limitation compte les messages enregistrés, et non
- * des compteurs en mémoire : elle vaut pour toutes les instances, mais deux messages
- * simultanés peuvent laisser passer un sixième message, ce qui est sans conséquence ici.
- */
+/** Service applicatif de la Taverne. */
 export function createTavernService(
   repo: MessageRepository,
   presence: PresenceRepository,
@@ -36,8 +38,27 @@ export function createTavernService(
     return { ok: true, message }
   }
 
-  /** Derniers messages de la Taverne. */
-  const latest = () => repo.latest(HISTORY_SIZE)
+  /**
+   * Derniers messages de la Taverne. Les messages qui ont dépassé leur durée de conservation
+   * sont d'abord supprimés : ils ne sont jamais présentés, même si la tâche quotidienne
+   * ne les a pas encore supprimés.
+   */
+  async function latest() {
+    await repo.removeOlderThan(expiredBefore(clock()))
+    return repo.latest(HISTORY_SIZE)
+  }
+
+  /**
+   * Tâche quotidienne : applique les durées de conservation des messages et de la présence,
+   * même si personne ne visite la Taverne. Renvoie le nombre de lignes supprimées.
+   */
+  async function purge() {
+    const now = clock()
+    return {
+      messages: await repo.removeOlderThan(expiredBefore(now)),
+      presence: await presence.removeStale(staleBefore(now)),
+    }
+  }
 
   /**
    * Joueurs présents. Les lignes des joueurs partis sont d'abord supprimées : la présence
@@ -57,7 +78,7 @@ export function createTavernService(
   /** Retire aussitôt un joueur qui quitte la Taverne. */
   const leave = (playerId: string) => presence.remove(playerId)
 
-  return { post, latest, present, heartbeat, leave }
+  return { post, latest, present, heartbeat, leave, purge }
 }
 
 export type TavernService = ReturnType<typeof createTavernService>
