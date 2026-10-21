@@ -64,6 +64,13 @@
       "when": 1792576602655,
       "tag": "0008_marche",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792577689774,
+      "tag": "0009_taverne",
+      "breakpoints": true
     }
   ]
 }
