@@ -3,6 +3,9 @@ import { createTestDatabase } from '@/platform/db/client'
 import { createEventStore } from '@/platform/event-store/event-store'
 import { createApi } from './create-api'
 
+/** Secret de test de la tâche planifiée qui distribue la boîte d'envoi. */
+export const TEST_CRON_SECRET = 'secret-de-test'
+
 /**
  * Adaptateur d'authentification réservé aux tests : le joueur est identifié par
  * l'en-tête x-test-user, sans compte ni cookie. Il n'est jamais utilisé par server.ts.
@@ -30,6 +33,7 @@ export async function createTestApi() {
     auth: testAuth,
     db,
     store,
+    cronSecret: TEST_CRON_SECRET,
     clock: () => now,
     realtime: { pollMs: 20, maxStreamMs: 150 },
   })

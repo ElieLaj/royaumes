@@ -8,6 +8,8 @@ import type { Db } from '@/platform/db/client'
 import type { EventStore } from '@/platform/event-store/event-store'
 import { requireUser } from '@/platform/http/require-user'
 import type { AppEnv } from '@/platform/http/types'
+import { createDispatchApi } from '@/platform/outbox/dispatch-api'
+import { createDispatcher } from '@/platform/outbox/outbox'
 import { createProjectionRunner } from '@/platform/projection/projection'
 import type { ChannelPolicy } from '@/platform/realtime/channel-policy'
 import { createRealtimeApi, type RealtimeOptions } from '@/platform/realtime/stream-api'
@@ -26,6 +28,8 @@ export interface ApiDeps {
   clock?: () => number
   /** Réglages du temps réel (durée des flux, intervalle de lecture) ; raccourcis dans les tests. */
   realtime?: Partial<Omit<RealtimeOptions, 'store' | 'policies'>>
+  /** Secret attendu de la tâche planifiée qui distribue la boîte d'envoi ; route fermée sans lui. */
+  cronSecret?: string
 }
 
 /**
@@ -33,8 +37,9 @@ export interface ApiDeps {
  * la plateforme technique et l'ensemble des modules.
  * Ajouter un module consiste à l'instancier ici, puis à monter son API.
  */
-export function createApi({ auth, db, store, ready, clock, realtime }: ApiDeps) {
+export function createApi({ auth, db, store, ready, clock, realtime, cronSecret }: ApiDeps) {
   const projections = createProjectionRunner(db)
+  const dispatcher = createDispatcher(db)
 
   // 1. Instanciation des modules. Leurs dépendances (base de données,
   //    journal d'événements, authentification) leur seront fournies ici.
@@ -71,6 +76,8 @@ export function createApi({ auth, db, store, ready, clock, realtime }: ApiDeps) 
 
   /** Routes d'authentification, entièrement traitées par l'adaptateur d'authentification. */
   app.on(['GET', 'POST'], '/auth/*', (c) => auth.handler(c.req.raw))
+
+  app.route('/outbox', createDispatchApi(dispatcher, cronSecret))
 
   /** Routes réservées aux joueurs connectés : tout module protégé doit être ajouté ici. */
   app.use('/realm/*', requireUser(auth))

@@ -36,7 +36,14 @@ export function getServer(): Server {
     /** Durée maximale d'un flux temps réel : 240 s par défaut, sous la limite de 300 s de Vercel. */
     const maxStreamMs = Number(process.env.STREAM_MAX_SECONDS ?? 240) * 1000
     globalForServer.royaumes = {
-      api: createApi({ auth, db, store, ready, realtime: { maxStreamMs } }),
+      api: createApi({
+        auth,
+        db,
+        store,
+        ready,
+        realtime: { maxStreamMs },
+        cronSecret: process.env.CRON_SECRET,
+      }),
       auth,
       ready,
     }
