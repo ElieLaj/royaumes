@@ -16,21 +16,21 @@ ou au document qui le produit.
 | Modules métier | 6 : `realm`, `dungeon`, `market`, `ranking`, `tavern`, `system` |
 | Briques de la plateforme | 9 : `auth`, `cron`, `db`, `event-store`, `http`, `outbox`, `privacy`, `projection`, `realtime` |
 | Service extrait | 1 : `src/services/village`, non déployé (ADR 0009) |
-| Lignes de code, hors tests | 7 888 (`src` et `app`) |
-| Fichiers de test, nombre de tests | 33 fichiers, 232 tests |
-| Commits | 82 |
+| Lignes de code, hors tests | 7 913 (`src` et `app`) |
+| Fichiers de test, nombre de tests | 36 fichiers, 236 tests |
+| Commits | 84 |
 | Hébergement | Vercel (Francfort), base Neon (Francfort) |
 
 | Module | Stockage | Lignes, hors tests |
 | --- | --- | --- |
-| `realm` | Event Sourcing ; version distante pour le service extrait (153 lignes) | 1 032 |
+| `realm` | Event Sourcing ; version distante pour le service extrait (145 lignes) | 1 024 |
 | `dungeon` | Event Sourcing, projection des expéditions ouvertes | 1 939 |
 | `market` | Event Sourcing, projection des offres, saga | 1 205 |
 | `ranking` | Projection du journal | 445 |
 | `tavern` | Tables ordinaires | 664 |
 | `system` | Aucun | 73 |
 
-Le service Village compte 76 lignes, et la plateforme 1 546. Ces chiffres s'obtiennent par la boucle
+Le service Village compte 76 lignes, et la plateforme 1 577. Ces chiffres s'obtiennent par la boucle
 de la sous-partie 2.1 du TD11, étendue à `src/services/`, et par `git ls-files src app`.
 
 ## 2. Les décisions d'architecture
@@ -47,18 +47,18 @@ au statut « proposé » : ils décrivent des décisions appliquées, que l'aute
 | 0005 | Intelligence artificielle déterministe | Simulation d'équilibrage (TD7) | A tenu : la simulation reproduit ses résultats à graine égale. Les expéditions de quatre joueurs restent faciles. |
 | 0006 | CQRS et projections rattrapées à la lecture | Test de charge (TD11) | A tenu, après correction : la mesure a désigné le rattrapage comme goulet, et le chemin rapide a apporté 25 à 40 % de débit sur les trois lectures concernées. |
 | 0007 | Saga orchestrée et boîte d'envoi | Panne du service extrait (TD11) | A tenu : la saga reprend après la panne sans aucun code supplémentaire. La dette DT-007, l'examen des messages abandonnés, a été remboursée. |
-| 0008 | Taverne sans Event Sourcing, réécriture ciblée du journal | Revue de conformité (TD10) | A tenu, avec des réserves : six exigences sur dix sont conformes, et les écarts sont consignés (DT-008, DT-009). |
+| 0008 | Taverne sans Event Sourcing, réécriture ciblée du journal | Revue de conformité (TD10) | A tenu : huit exigences sur dix sont conformes, et les deux écarts constatés, les sessions expirées et les erreurs journalisées avec leurs paramètres, ont été remboursés au TD11 (DT-008, DT-009). |
 | 0009 | Extraction du Village, préparée mais non déployée | Six tests de contrat, démonstration à deux processus | A tenu. Reste à rembourser trois dettes avant tout déploiement (DT-010 à DT-012). |
 
 ## 3. La qualité
 
 | Caractéristique | Indicateur | Valeur | Appréciation |
 | --- | --- | --- | --- |
-| Adéquation fonctionnelle | Tests réussis ; couverture des domaines | 232 tests ; 99,7 % des lignes des domaines (`pnpm test:coverage`) | Satisfaisante : les règles du jeu sont testées sans base ni serveur. |
+| Adéquation fonctionnelle | Tests réussis ; couverture des domaines | 236 tests ; 99,7 % des lignes des domaines (`pnpm test:coverage`) | Satisfaisante : les règles du jeu sont testées sans base ni serveur. |
 | Efficacité des performances | Débit et p99 des lectures ; respect du budget | `perf/apres.json` : de 68 à 106 requêtes par seconde, p99 de 356 à 488 ms, sans erreur | Acceptable en local, avec peu de marge (488 ms pour le Classement, budget de 500 ms) ; la première série de mesures dépassait le budget de 28 ms pour le Marché. Rien n'est mesuré en production, ni pour les flux temps réel. |
 | Fiabilité | Tests de concurrence, de reprise et d'idempotence ; messages abandonnés | Conflits de version, bail et doublons de la boîte d'envoi, reprise de la saga après une panne : tests réussis ; `scripts/dead-letters.ts` : aucun message abandonné en développement | Bonne : chaque mécanisme a son test, et les échecs durables sont désormais signalés et relançables. |
-| Sécurité | Exigences des revues de sécurité et de conformité | 50 exigences : 40 conformes, 3 non conformes, 7 en risque accepté | Moyenne : les contrôles d'accès sont éprouvés, mais trois écarts restent ouverts (section 5). |
-| Maintenabilité | Règles d'architecture ; fonctions d'aptitude ; couverture | 8 règles de dependency-cruiser, 2 fonctions d'aptitude, aucune violation ; 75,0 % des lignes couvertes | Bonne pour le code serveur (modules 93,6 %, plateforme 92,4 %), mais l'interface (320 lignes, 13 fichiers à 0 %) n'est vérifiée par aucun test automatique : une régression du temps réel ne serait détectée que par un essai à la main. |
+| Sécurité | Exigences des revues de sécurité et de conformité | 50 exigences : 42 conformes, 1 non conforme, 7 en risque accepté | Satisfaisante : les contrôles d'accès sont éprouvés, et un seul écart reste ouvert, le secret de signature hors Vercel (section 5). |
+| Maintenabilité | Règles d'architecture ; fonctions d'aptitude ; couverture | 8 règles de dependency-cruiser, 2 fonctions d'aptitude, aucune violation ; 75,3 % des lignes couvertes | Bonne pour le code serveur (modules 93,6 %, plateforme 92,6 %), mais l'interface (320 lignes, 13 fichiers à 0 %) n'est vérifiée par aucun test automatique : une régression du temps réel ne serait détectée que par un essai à la main. |
 | Flexibilité | Extraction d'un module ; changement de base entre local et production | Village extrait, avec retour arrière sans migration ; PGlite et Neon derrière le même type `Db`, mêmes migrations | Bonne : l'extraction est démontrée, non déployée. |
 
 ## 4. La dette technique
@@ -66,19 +66,17 @@ au statut « proposé » : ils décrivent des décisions appliquées, que l'aute
 | Indicateur | Valeur |
 | --- | --- |
 | Entrées consignées | 14 (DT-001 à DT-014) |
-| Entrées remboursées, dont à l'échéance prévue | 7, dont 7 à l'échéance prévue |
-| Entrées ouvertes | 7 : DT-008 et DT-009 (revue de conformité), DT-010 à DT-012 (service extrait), DT-013 et DT-014 (revues de sécurité) |
+| Entrées remboursées, dont à l'échéance prévue | 9, dont 9 à l'échéance prévue |
+| Entrées ouvertes | 5 : DT-010 à DT-012 (service extrait), DT-013 et DT-014 (revues de sécurité) |
 
-Analyse : les sept premières entrées ont été consignées au moment où le raccourci a été pris, et
-remboursées au TD annoncé, y compris au TD11 pour la limitation des tentatives et les messages
-abandonnés : c'est le signe d'un pilotage. Les sept entrées ouvertes se répartissent en trois
-familles. Les trois dettes de l'extraction attendent un événement, le déploiement du service, qui
-n'est pas prévu. Les deux dernières, DT-013 et DT-014, ont été consignées en dressant ce bilan : elles
-étaient des actions décidées par des revues, mais ne figuraient pas au registre, et auraient été
-oubliées. Enfin, DT-008 et DT-009, issues de la revue de conformité, avaient pour échéance le TD11
-et n'ont pas été remboursées : c'est le seul écart entre l'échéance annoncée et la réalité. Elles
-touchent des données personnelles (sessions expirées conservées, erreurs journalisées avec leurs
-paramètres) et sont les premières à traiter.
+Analyse : les neuf premières entrées ont été consignées au moment où le raccourci a été pris, et
+remboursées au TD annoncé, y compris au TD11 pour la limitation des tentatives, les messages
+abandonnés, les sessions expirées et les erreurs journalisées : c'est le signe d'un pilotage. Les cinq
+entrées ouvertes se répartissent en deux familles. Les trois dettes de l'extraction attendent un
+événement, le déploiement du service, qui n'est pas prévu. DT-013 et DT-014 ont été consignées en
+dressant ce bilan : elles étaient des actions décidées par des revues, mais ne figuraient pas au
+registre, et auraient été oubliées ; leur échéance est un déploiement hors Vercel, ou celui du
+service. Aucune entrée n'a dépassé son échéance.
 
 ## 5. Les revues
 
@@ -87,7 +85,7 @@ paramètres) et sont les premières à traiter.
 | Sécurité de l'authentification | 16 | 12 | 4 : S7 non conforme ; S3, S6, S9 en risque accepté | S7 : DT-013 ; S6 : à confirmer sur le déploiement réel ; S3 : DT-004 remboursée, reste l'option `AUTH_RATE_LIMIT=off` |
 | Sécurité du Donjon | 14 | 12 | 2 : D7 et D14 en risque accepté | Aucune : réexamen si le jeu conserve des informations plus sensibles |
 | Sécurité du Marché | 10 | 10 | 0 | Réserves de M8 : DT-014 ; `CRON_SECRET` à vérifier sur Vercel |
-| Conformité au RGPD | 10 | 6 | 4 : R8 et R9 non conformes ; R4 et R10 en risque accepté | R8 : DT-008 ; R9 : DT-009 ; plan de l'hébergeur, accord de traitement et durée des journaux à vérifier |
+| Conformité au RGPD | 10 | 8 | 2 : R4 et R10 en risque accepté | R8 et R9 remboursées (DT-008, DT-009) ; plan de l'hébergeur, accord de traitement et durée des journaux à vérifier |
 
 Toute action qui appelle une modification du code figure au registre de la dette. Les actions qui
 demandent une vérification sur le déploiement réel, S6, `CRON_SECRET` et l'offre de l'hébergeur, n'y
@@ -108,12 +106,12 @@ Le projet peut être repris et peut évoluer sans régression pour tout ce qui r
 frontières des modules sont vérifiées à chaque construction, les règles du jeu sont testées sans
 infrastructure, les décisions sont consignées avec leurs conséquences, et l'extraction du Village a
 démontré que le monolithe tient sa promesse de modularité. Trois conditions sont à remplir. Il faut
-d'abord traiter les dettes qui touchent des données personnelles (DT-008 et DT-009) et confirmer sur
-le déploiement réel les points que les revues n'ont pu vérifier. Il faut ensuite mesurer la charge des
-flux temps réel et la durée des opérations qui parcourent le journal, seuls risques que le projet
-n'a pas quantifiés. Il faut enfin doter l'interface d'un test automatique, faute de quoi ce que
-voit le joueur reste sans filet. Le service Village, lui, ne doit pas être déployé avant le
-remboursement de ses trois dettes.
+d'abord confirmer sur le déploiement réel les points que les revues n'ont pu vérifier : la
+configuration de la tâche planifiée, le cookie de session et l'offre de l'hébergeur. Il faut ensuite
+mesurer la charge des flux temps réel et la durée des opérations qui parcourent le journal, seuls
+risques que le projet n'a pas quantifiés. Il faut enfin doter l'interface d'un test automatique,
+faute de quoi ce que voit le joueur reste sans filet. Le service Village, lui, ne doit pas être
+déployé avant le remboursement de ses trois dettes, ni le projet hors de Vercel avant celui de DT-013.
 
 ## Usage de l'IA générative
 

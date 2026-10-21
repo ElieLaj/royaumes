@@ -3,6 +3,7 @@
 - Date : 2026-10-21
 - Périmètre : données personnelles de l'ensemble du jeu, export et effacement, durées de conservation, journaux techniques.
 - Références : RGPD, articles 5, 15, 17, 20, 25 et 30 ; registre des traitements ; ADR 0008.
+- Mise à jour du TD11 : R8 et R9, non conformes à l'origine, ont été remboursées (DT-008, DT-009) et revérifiées.
 - Méthode : tests Vitest (221 réussis), lecture du code et de la bibliothèque d'authentification, puis
   vérifications sur un serveur local avec des comptes jetables, créés par l'inscription réelle, et une
   base jetable supprimée ensuite : parcours à deux joueurs par l'API et dans le navigateur, export,
@@ -19,27 +20,23 @@
 | R5 | L'effacement est tracé, sans conserver de donnée sur le joueur, et peut être relancé | Tests « enregistre l'effacement dans le registre... » et « peut être relancé sans effet supplémentaire » | Les tests réussissent. Observé sur le serveur local : `platform.erasures` contient une ligne par compte effacé, avec les seules colonnes `id`, `erased_at` et `events_rewritten` ; les deux comptes qui avaient joué ont réécrit trois événements, celui qui n'avait écrit que des messages aucun. Une seconde suppression du même compte réécrit zéro événement (test). | conforme |
 | R6 | Les messages de la Taverne ne sont pas conservés plus de trente jours, même sans visite | Tests de la durée de conservation ; compte rendu de la tâche quotidienne dans les journaux de Vercel | Les deux tests réussissent : une lecture supprime les messages de plus de trente jours, et la tâche quotidienne supprime messages et présences périmés sans visite de la Taverne. Observé sur le serveur local, avec un secret défini : la route `/api/cron/daily` répond 401 sans secret ou avec un autre, et 200 avec le bon, accompagné du compte rendu de chaque tâche (`outbox`, `tavern`). L'ancienne route répond 404. Le compte rendu dans les journaux de Vercel n'a pas été vérifié. | conforme |
 | R7 | La présence ne constitue aucun historique des visites | Test « considère comme parti un joueur sans signal depuis deux minutes, et supprime sa ligne » | Le test lit la table en SQL : la ligne d'un joueur sans signal depuis deux minutes est supprimée, et la table ne contient qu'une ligne par joueur présent. Observé sur le serveur local : le départ explicite retire aussitôt le joueur de la liste, et le navigateur envoie bien le signal de départ en quittant la page. | conforme |
-| R8 | Les sessions expirées ne sont pas conservées indéfiniment | Requête SQL sur `identity.session` : sessions dont `expires_at` est passé | Sur la base de développement, neuve, la requête compte zéro session expirée. La lecture de Better Auth 1.7.7 (`api/routes/session.mjs`) montre qu'une session expirée n'est supprimée que lorsque son cookie est présenté de nouveau. Une session dont le cookie n'est plus jamais présenté (cookie effacé, appareil perdu) reste dans `identity.session`, avec l'adresse IP et le navigateur, jusqu'à la suppression du compte, et aucune tâche du projet ne la purge. | non conforme |
-| R9 | Les journaux techniques ne contiennent pas de données personnelles au-delà du nécessaire | Lecture de `app.onError` dans `create-api.ts` ; consultation des journaux de Vercel | La réponse au client ne contient aucun détail (`INTERNAL`), mais `app.onError` journalise l'erreur entière. Observé sur la base de développement : l'insertion refusée d'un message produit une erreur « Failed query: insert into "tavern"."messages" ... params: id-du-joueur,Zéphyrine,... », c'est-à-dire l'identifiant, le nom de l'auteur et, pour un message valide, son contenu. Ces journaux de Vercel, conservés une heure sur l'offre gratuite, n'ont pas été consultés. | non conforme |
+| R8 | Les sessions expirées ne sont pas conservées indéfiniment | Requête SQL sur `identity.session` : sessions dont `expires_at` est passé | Sur la base de développement, neuve, la requête compte zéro session expirée. La lecture de Better Auth 1.7.7 (`api/routes/session.mjs`) montre qu'une session expirée n'est supprimée que lorsque son cookie est présenté de nouveau. Une session dont le cookie n'est plus jamais présenté (cookie effacé, appareil perdu) reste dans `identity.session`, avec l'adresse IP et le navigateur, jusqu'à la suppression du compte, et aucune tâche du projet ne la purge. Remboursée au TD11 (DT-008) : la tâche quotidienne `identity` supprime les sessions dont `expires_at` est passé, avec leur adresse IP et leur navigateur. Test « supprime les sessions expirées... » ; observé sur le serveur local : une session expirée de force est supprimée par la tâche, dont le compte rendu indique `{"sessions":1}`, et la requête de cette exigence compte ensuite zéro session expirée. | conforme |
+| R9 | Les journaux techniques ne contiennent pas de données personnelles au-delà du nécessaire | Lecture de `app.onError` dans `create-api.ts` ; consultation des journaux de Vercel | La réponse au client ne contient aucun détail (`INTERNAL`), mais `app.onError` journalise l'erreur entière. Observé sur la base de développement : l'insertion refusée d'un message produit une erreur « Failed query: insert into "tavern"."messages" ... params: id-du-joueur,Zéphyrine,... », c'est-à-dire l'identifiant, le nom de l'auteur et, pour un message valide, son contenu. Ces journaux de Vercel, conservés une heure sur l'offre gratuite, n'ont pas été consultés. Remboursée au TD11 (DT-009) : `describeError` ne retient d'une erreur que son nom et la première ligne de son message, avec celle de sa cause, sans paramètres ni trace. Elle sert à `app.onError`, au champ `last_error` de la boîte d'envoi et au compte rendu des tâches quotidiennes. Test « ne journalise ni le contenu d'un message... » : il échoue avec l'ancienne journalisation, et réussit avec la nouvelle ; observé sur la base de développement, l'insertion refusée est journalisée « Failed query: insert into "tavern"."messages" ... values (default, $1, $2, $3, $4) (cause : null value in column "body" ...) », sans valeur. | conforme |
 | R10 | Après la suppression d'un compte, l'identifiant conservé ne peut plus être relié à une personne | Recherche de l'identifiant dans `identity`, `platform.outbox` et les journaux de Vercel | Observé sur le serveur local, après la suppression d'un compte : son identifiant n'est plus dans aucune table de `identity`, mais reste dans `platform.events` (quatre événements), `platform.outbox`, `ranking.players`, `ranking.game_players` et `market.offers`, aucune ne contenant plus son nom. Les adresses des flux temps réel, comme `/api/stream/village-<identifiant>`, contiennent l'identifiant et figurent dans les journaux de Vercel avec l'adresse IP de la requête : le lien subsiste chez l'hébergeur pendant la durée de conservation de ses journaux, soit une heure sur l'offre gratuite. Ces journaux n'ont pas été consultés. | risque accepté |
 
 ## Synthèse
 
-Sur dix exigences, six sont conformes, deux sont non conformes et deux sont en risque accepté.
-
-Les non-conformités sont :
-
-- les sessions expirées dont le cookie n'est plus présenté ne sont jamais purgées (R8, DT-008) ;
-- les erreurs sont journalisées avec leurs paramètres, qui peuvent contenir des noms, des identifiants et
-  des messages (R9, DT-009).
+Sur dix exigences, huit sont conformes, aucune n'est non conforme et deux sont en risque accepté.
+À l'origine, six étaient conformes et deux non conformes : R8 et R9 ont été remboursées au TD11.
 
 Les risques acceptés sont les messages d'autres joueurs qui citent un nom effacé (R4), et le lien
 temporaire entre un identifiant pseudonymisé et une adresse IP dans les journaux de l'hébergeur (R10).
 
-Actions décidées :
+Actions décidées à l'origine, et leur suite :
 
-- DT-008 : purger les sessions expirées par la tâche quotidienne, et couvrir la purge par un test ;
-- DT-009 : journaliser le nom et le message de l'erreur, sans ses paramètres ;
+- DT-008 : purger les sessions expirées par la tâche quotidienne, et couvrir la purge par un test.
+  Fait au TD11.
+- DT-009 : journaliser le nom et le message de l'erreur, sans ses paramètres. Fait au TD11.
 - après le déploiement : exécuter la tâche planifiée depuis Vercel et en lire le compte rendu, vérifier
   l'offre de l'hébergeur et l'applicabilité de son accord de traitement des données, puis confirmer la
-  durée de conservation de ses journaux.
+  durée de conservation de ses journaux. Reste à faire.

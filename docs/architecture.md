@@ -187,7 +187,8 @@ l'ensemble des contrôles a réussi, et les migrations ne sont appliquées qu'ap
 
 La tâche planifiée, déclarée dans `vercel.json`, exécute chaque jour les tâches quotidiennes :
 la distribution des messages restés en attente dans la boîte d'envoi, et l'application des
-durées de conservation de la Taverne. Elle ne s'exécute que sur le déploiement de production.
+durées de conservation de la Taverne, et la suppression des sessions expirées. Elle ne s'exécute que
+sur le déploiement de production.
 
 Le service Village extrait n'est pas déployé : en production, le Village s'exécute dans
 les fonctions Vercel, comme les autres modules (ADR 0009).

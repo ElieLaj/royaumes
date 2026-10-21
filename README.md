@@ -143,7 +143,7 @@ page « Mes données » :
 
 Les messages de la Taverne sont conservés trente jours, et la présence d'un joueur deux
 minutes après son dernier signal. Ces durées sont appliquées à chaque lecture, et chaque jour
-par la tâche planifiée `/api/cron/daily`.
+par la tâche planifiée `/api/cron/daily`, qui supprime aussi les sessions expirées.
 
 ## Base de données
 
