@@ -23,7 +23,8 @@ type TestUser = string | null
 
 /**
  * Application complète, assemblée sur une base de test vidée, avec une horloge contrôlée
- * et l'adaptateur d'authentification de test.
+ * et l'adaptateur d'authentification de test. La base est aussi renvoyée : certains tests
+ * lisent directement les tables, pour vérifier par exemple qu'une donnée a été supprimée.
  */
 export async function createTestApi() {
   const start = Date.UTC(2026, 0, 1)
@@ -59,5 +60,5 @@ export async function createTestApi() {
     now += minutes * 60_000
   }
 
-  return { api, get, post, advance }
+  return { api, db, get, post, advance }
 }

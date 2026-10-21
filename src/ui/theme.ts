@@ -28,6 +28,7 @@ export const theme: Record<string, Look> = {
   companion: { glyph: '🤖', label: 'Compagnon' },
   market: { glyph: '⚖️', label: 'Marché' },
   ranking: { glyph: '🏆', label: 'Classement' },
+  tavern: { glyph: '🍺', label: 'Taverne' },
 }
 
 /** Apparence d'une entité ; une apparence neutre si l'entité n'est pas décrite. */
