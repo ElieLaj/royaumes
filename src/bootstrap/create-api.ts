@@ -48,6 +48,8 @@ export function createApi({ auth, db, store, ready, clock, realtime, cronSecret 
   const dungeon = createDungeonModule({ store, db, projections, clock })
   const ranking = createRankingModule({ db, projections })
 
+  dispatcher.register(realm.handlers)
+
   /** Règles d'accès aux canaux temps réel, déclarées par les modules. */
   const policies: ChannelPolicy[] = [
     realm.channelPolicy,
