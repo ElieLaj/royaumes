@@ -42,31 +42,35 @@ export function createVillageServiceApp({ db, secret, appUrl, clock, fetch }: Vi
 
   const privacy = createPrivacyService(db, [realm.personalData], clock)
 
-  return new Hono<AppEnv>()
-    .use(requireServiceSecret(secret))
+  return (
+    new Hono<AppEnv>()
+      .use(requireServiceSecret(secret))
 
-    .use('/realm/*', playerFromHeaders)
-    .route('/realm', realm.api)
+      .use('/realm/*', playerFromHeaders)
+      .route('/realm', realm.api)
 
-    .route(
-      '/',
-      createInboxApi(dispatcher, secret, () => dispatcher.dispatch()),
-    )
+      /** DETTE TECHNIQUE DT-012 (docs/qualite/dette-technique.md) : la boîte d'envoi du service n'est distribuée qu'à la réception d'un message. */
+      .route(
+        '/',
+        createInboxApi(dispatcher, secret, () => dispatcher.dispatch()),
+      )
 
-    .get('/events', async (c) => {
-      const after = Number(c.req.query('after') ?? 0) || 0
-      const events = await store.readAll({
-        streamPrefix: VILLAGE_CHANNEL_PREFIX,
-        afterPosition: after,
+      /** DETTE TECHNIQUE DT-011 (docs/qualite/dette-technique.md) : le flux publié est renvoyé en une seule réponse, sans pagination. */
+      .get('/events', async (c) => {
+        const after = Number(c.req.query('after') ?? 0) || 0
+        const events = await store.readAll({
+          streamPrefix: VILLAGE_CHANNEL_PREFIX,
+          afterPosition: after,
+        })
+        return c.json({ events })
       })
-      return c.json({ events })
-    })
 
-    .get('/personal-data/:playerId', async (c) => {
-      const data = await privacy.exportData(c.req.param('playerId'))
-      return c.json(data.sections.realm ?? null)
-    })
-    .delete('/personal-data/:playerId', async (c) =>
-      c.json(await privacy.erase(c.req.param('playerId'))),
-    )
+      .get('/personal-data/:playerId', async (c) => {
+        const data = await privacy.exportData(c.req.param('playerId'))
+        return c.json(data.sections.realm ?? null)
+      })
+      .delete('/personal-data/:playerId', async (c) =>
+        c.json(await privacy.erase(c.req.param('playerId'))),
+      )
+  )
 }

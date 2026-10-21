@@ -42,6 +42,7 @@ function resolveBaseUrl(): string {
 function resolveSecret(): string {
   const secret = process.env.BETTER_AUTH_SECRET
   if (secret) return secret
+  /** DETTE TECHNIQUE DT-013 (docs/qualite/dette-technique.md) : hors Vercel, un démarrage en production sans BETTER_AUTH_SECRET utilise le secret de développement. */
   if (process.env.NODE_ENV === 'production' && process.env.VERCEL) {
     throw new Error('BETTER_AUTH_SECRET est obligatoire en production.')
   }

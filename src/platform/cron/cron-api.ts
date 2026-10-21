@@ -17,6 +17,7 @@ type TaskReport = { ok: true; result: unknown } | { ok: false; error: string }
  */
 export function createCronApi(tasks: Record<string, DailyTask>, secret: string | undefined) {
   return new Hono<AppEnv>().get('/daily', async (c) => {
+    /** DETTE TECHNIQUE DT-014 (docs/qualite/dette-technique.md) : la comparaison du secret n'est pas à temps constant. */
     if (!secret || c.req.header('authorization') !== `Bearer ${secret}`) {
       return c.json({ error: { code: 'UNAUTHORIZED', message: 'Accès refusé' } }, 401)
     }

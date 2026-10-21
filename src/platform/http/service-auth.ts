@@ -28,6 +28,7 @@ export function serviceHeaders(secret: string, player?: { id: string; name: stri
 /** Refuse toute requête qui ne porte pas le secret partagé (401). */
 export const requireServiceSecret = (secret: string) =>
   createMiddleware<AppEnv>(async (c, next) => {
+    /** DETTE TECHNIQUE DT-014 (docs/qualite/dette-technique.md) : la comparaison du secret n'est pas à temps constant. */
     if (c.req.header('authorization') !== `Bearer ${secret}`) {
       return c.json({ error: { code: 'UNAUTHORIZED', message: 'Accès refusé' } }, 401)
     }

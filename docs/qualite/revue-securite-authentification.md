@@ -10,7 +10,7 @@
 | --- | --- | --- | --- | --- |
 | S1 | Les mots de passe ne sont conservés que sous forme d'empreinte, par une fonction dédiée | Test « ne conserve qu'une empreinte du mot de passe » ; documentation de Better Auth | Le test lit la colonne `identity.account.password` : elle est renseignée et ne contient pas le mot de passe saisi. Le recours à scrypt repose sur la documentation de Better Auth ; aucun test du projet ne le vérifie. | conforme |
 | S2 | Les mots de passe comportent au moins 8 caractères | Test « refuse un mot de passe trop court » | Le test obtient un code 400 pour un mot de passe de 5 caractères. Le formulaire impose aussi `minLength=8`, et la page affiche un message en français. | conforme |
-| S3 | Les tentatives répétées d'inscription et de connexion sont limitées | Sous-partie 2.3 ; configuration de `better-auth.ts` | Mesuré sur le serveur local : en 45 inscriptions successives depuis une même adresse (en-tête `x-forwarded-for` fixe), 40 sont acceptées et la 41e reçoit un code 429. Les compteurs sont conservés dans la mémoire de chaque instance : sur Vercel, la limite réelle est multipliée par le nombre d'instances actives. Écart consigné comme dette DT-004. Par ailleurs, la variable `AUTH_RATE_LIMIT=off` désactive la limitation partout sauf sur Vercel, y compris pour un `next start` en production sur un autre hébergeur : le code ne restreint pas cette possibilité au développement. | risque accepté |
+| S3 | Les tentatives répétées d'inscription et de connexion sont limitées | Sous-partie 2.3 ; configuration de `better-auth.ts` | Mesuré sur le serveur local : en 45 inscriptions successives depuis une même adresse (en-tête `x-forwarded-for` fixe), 40 sont acceptées et la 41e reçoit un code 429. Les compteurs étaient conservés dans la mémoire de chaque instance : sur Vercel, la limite réelle était multipliée par le nombre d'instances actives. Écart consigné comme dette DT-004, remboursée au TD11 : les compteurs sont conservés dans la table `identity.rate_limit`, que toutes les instances partagent (test « conserve les compteurs dans la base... »). Par ailleurs, la variable `AUTH_RATE_LIMIT=off` désactive la limitation partout sauf sur Vercel, y compris pour un `next start` en production sur un autre hébergeur : le code ne restreint pas cette possibilité au développement. | risque accepté |
 | S4 | Le cookie de session est inaccessible au JavaScript de la page | Test sur l'attribut `HttpOnly` | L'en-tête `Set-Cookie` de la connexion contient `HttpOnly` (observé avec `curl`, et dans le fichier de cookies : ligne préfixée `#HttpOnly_`). Le test automatisé le vérifie à l'inscription. | conforme |
 | S5 | Le cookie de session n'est pas envoyé par les requêtes émises depuis un autre site | Test sur l'attribut `SameSite` | Le cookie porte `SameSite=Lax` (observé avec `curl`, vérifié par le test). `Lax` autorise l'envoi lors d'une navigation de premier niveau, mais pas lors des requêtes intersites émises par une page tierce ; l'exigence de S15 complète cette protection. | conforme |
 | S6 | Le cookie de session ne circule que sur des connexions chiffrées | Inspection du cookie dans le navigateur ; comportement en local et en production | Sur `http://localhost`, le cookie ne porte pas l'attribut `Secure` : la connexion locale ne quitte pas le poste. Vérifié sur un serveur de production local dont les variables simulent Vercel (adresse HTTPS) : le cookie se nomme `__Secure-better-auth.session_token` et porte `Secure`, `HttpOnly` et `SameSite=Lax`. Le cookie du déploiement réel n'a pas encore été inspecté : à confirmer en production (sous-partie 4.5 du TD5), après quoi le statut passera à conforme. | risque accepté |
@@ -32,11 +32,13 @@ accepté (S3, S6, S9).
 
 Actions décidées :
 
-- S3 : la dette DT-004 est ouverte, avec échéance au TD11 ; les compteurs pourraient être déplacés dans
-  la base de données. Restreindre `AUTH_RATE_LIMIT=off` au développement et aux tests.
+- S3 : la dette DT-004 a été remboursée au TD11 : les compteurs sont dans la base de données. Reste le
+  risque lié à `AUTH_RATE_LIMIT=off`, conservé parce que le test de charge du TD11 l'utilise sur une
+  construction de production ; il est sans effet sur Vercel.
 - S6 : à confirmer sur le déploiement réel, en inspectant dans le navigateur le cookie
   `__Secure-better-auth.session_token` ; le statut passera alors à conforme.
 - S9 : risque accepté en l'état ; à réexaminer si le jeu conserve un jour des données sensibles.
 - S10 : chaque module dont les routes sont réservées aux joueurs reçoit un test de contrôle d'accès.
 - S7 : corriger `resolveSecret` pour qu'il lève l'erreur dès que `NODE_ENV=production`, quel que soit
-  l'hébergeur.
+  l'hébergeur. Consigné comme dette DT-013 au TD11 : la correction ferait échouer le démarrage de la
+  construction de production sans secret, que le test de charge emploie.
