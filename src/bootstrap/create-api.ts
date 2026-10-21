@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import { createDungeonModule } from '@/modules/dungeon'
+import { createMarketModule } from '@/modules/market'
 import { createRankingModule } from '@/modules/ranking'
 import { createRealmModule } from '@/modules/realm'
 import { createSystemModule } from '@/modules/system'
@@ -9,7 +10,7 @@ import type { EventStore } from '@/platform/event-store/event-store'
 import { requireUser } from '@/platform/http/require-user'
 import type { AppEnv } from '@/platform/http/types'
 import { createDispatchApi } from '@/platform/outbox/dispatch-api'
-import { createDispatcher } from '@/platform/outbox/outbox'
+import { createDispatcher, type DispatcherOptions } from '@/platform/outbox/outbox'
 import { createProjectionRunner } from '@/platform/projection/projection'
 import type { ChannelPolicy } from '@/platform/realtime/channel-policy'
 import { createRealtimeApi, type RealtimeOptions } from '@/platform/realtime/stream-api'
@@ -30,6 +31,8 @@ export interface ApiDeps {
   realtime?: Partial<Omit<RealtimeOptions, 'store' | 'policies'>>
   /** Secret attendu de la tâche planifiée qui distribue la boîte d'envoi ; route fermée sans lui. */
   cronSecret?: string
+  /** Réglages de la boîte d'envoi (bail, tentatives, horloge) ; remplacés dans les tests. */
+  outbox?: DispatcherOptions
 }
 
 /**
@@ -37,9 +40,18 @@ export interface ApiDeps {
  * la plateforme technique et l'ensemble des modules.
  * Ajouter un module consiste à l'instancier ici, puis à monter son API.
  */
-export function createApi({ auth, db, store, ready, clock, realtime, cronSecret }: ApiDeps) {
+export function createApi({
+  auth,
+  db,
+  store,
+  ready,
+  clock,
+  realtime,
+  cronSecret,
+  outbox,
+}: ApiDeps) {
   const projections = createProjectionRunner(db)
-  const dispatcher = createDispatcher(db)
+  const dispatcher = createDispatcher(db, outbox)
 
   // 1. Instanciation des modules. Leurs dépendances (base de données,
   //    journal d'événements, authentification) leur seront fournies ici.
@@ -47,14 +59,23 @@ export function createApi({ auth, db, store, ready, clock, realtime, cronSecret 
   const realm = createRealmModule({ store, clock })
   const dungeon = createDungeonModule({ store, db, projections, clock })
   const ranking = createRankingModule({ db, projections })
+  const market = createMarketModule({
+    store,
+    db,
+    projections,
+    dispatch: () => dispatcher.dispatch(),
+    clock,
+  })
 
   dispatcher.register(realm.handlers)
+  dispatcher.register(market.handlers)
 
   /** Règles d'accès aux canaux temps réel, déclarées par les modules. */
   const policies: ChannelPolicy[] = [
     realm.channelPolicy,
     dungeon.channelPolicy,
     ranking.channelPolicy,
+    market.channelPolicy,
   ]
 
   // 2. Application principale : toutes ses routes sont préfixées par /api.
@@ -85,6 +106,7 @@ export function createApi({ auth, db, store, ready, clock, realtime, cronSecret 
   app.use('/realm/*', requireUser(auth))
   app.use('/dungeon/*', requireUser(auth))
   app.use('/ranking/*', requireUser(auth))
+  app.use('/market/*', requireUser(auth))
   app.use('/stream/*', requireUser(auth))
 
   // 4. Montage des sous-applications : chaque module reçoit son propre préfixe.
@@ -94,6 +116,7 @@ export function createApi({ auth, db, store, ready, clock, realtime, cronSecret 
     .route('/realm', realm.api)
     .route('/dungeon', dungeon.api)
     .route('/ranking', ranking.api)
+    .route('/market', market.api)
     .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
 

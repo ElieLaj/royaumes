@@ -26,7 +26,8 @@ type TestUser = string | null
  * et l'adaptateur d'authentification de test.
  */
 export async function createTestApi() {
-  let now = Date.UTC(2026, 0, 1)
+  const start = Date.UTC(2026, 0, 1)
+  let now = start
   const db = await createTestDatabase()
   const store = createEventStore(db)
   const api = createApi({
@@ -34,6 +35,7 @@ export async function createTestApi() {
     db,
     store,
     cronSecret: TEST_CRON_SECRET,
+    outbox: { now: () => Date.now() + (now - start) },
     clock: () => now,
     realtime: { pollMs: 20, maxStreamMs: 150 },
   })
