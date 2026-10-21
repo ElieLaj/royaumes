@@ -40,7 +40,7 @@ export function createApi({ auth, db, store, ready, clock, realtime }: ApiDeps) 
   //    journal d'événements, authentification) leur seront fournies ici.
   const system = createSystemModule()
   const realm = createRealmModule({ store, clock })
-  const dungeon = createDungeonModule({ store, clock })
+  const dungeon = createDungeonModule({ store, db, projections, clock })
   const ranking = createRankingModule({ db, projections })
 
   /** Règles d'accès aux canaux temps réel, déclarées par les modules. */
