@@ -13,5 +13,7 @@ export default defineConfig({
     env: { NODE_ENV: 'test' },
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    /** Chaque processus charge PGlite, en WebAssembly : trop de processus simultanés épuisent la mémoire. */
+    maxWorkers: 4,
   },
 })
