@@ -75,10 +75,31 @@ export function createDispatcher(
   }: DispatcherOptions = {},
 ) {
   const handlers = new Map<string, MessageHandler>()
+  /** Gestionnaire des sujets qu'aucun module ne traite ; aucun par défaut. */
+  let fallback: MessageHandler | null = null
 
   /** Enregistre les gestionnaires d'un module, par sujet. */
   function register(moduleHandlers: Record<string, MessageHandler>) {
     for (const [topic, handler] of Object.entries(moduleHandlers)) handlers.set(topic, handler)
+  }
+
+  /**
+   * Enregistre le gestionnaire des sujets qu'aucun module ne traite. Un service extrait
+   * l'utilise pour transmettre à l'application les messages destinés aux autres modules (TD11).
+   */
+  function registerFallback(handler: MessageHandler) {
+    fallback = handler
+  }
+
+  /**
+   * Traite immédiatement un message reçu d'un autre processus, par le gestionnaire de son sujet.
+   * Le message n'est pas enregistré : l'expéditeur le conserve dans sa propre boîte d'envoi
+   * jusqu'à ce que ce traitement réussisse, et le retentera sinon.
+   */
+  async function handle(message: Message) {
+    const handler = handlers.get(message.topic) ?? fallback
+    if (!handler) throw new Error(`Aucun gestionnaire pour le sujet ${message.topic}`)
+    await handler(message)
   }
 
   /**
@@ -114,9 +135,7 @@ export function createDispatcher(
   /** Remet un message à son gestionnaire, puis enregistre le succès ou l'échec. */
   async function deliver(message: Message): Promise<boolean> {
     try {
-      const handler = handlers.get(message.topic)
-      if (!handler) throw new Error(`Aucun gestionnaire pour le sujet ${message.topic}`)
-      await handler(message)
+      await handle(message)
       await db
         .update(outbox)
         .set({ processedAt: new Date(now()) })
@@ -198,7 +217,7 @@ export function createDispatcher(
     return updated.length === 1
   }
 
-  return { register, dispatch, status, abandoned, retry }
+  return { register, registerFallback, handle, dispatch, status, abandoned, retry }
 }
 
 /** Type du distributeur, déduit de sa fabrique. */

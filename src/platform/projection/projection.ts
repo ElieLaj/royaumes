@@ -1,4 +1,4 @@
-import { asc, eq, gt, max } from 'drizzle-orm'
+import { asc, eq, gt, max, sql } from 'drizzle-orm'
 import type { Db } from '../db/client'
 import type { StoredEvent } from '../event-store/event-store'
 import { events } from '../event-store/schema'
@@ -176,7 +176,25 @@ export function createProjectionRunner(
     return row?.position ?? 0
   }
 
-  return { catchUp, rebuild, positionOf }
+  /**
+   * Enregistre un point de reprise, pour un consommateur qui ne lit pas le journal local :
+   * le relais du flux d'un service extrait, par exemple (TD11). La position ne recule jamais,
+   * grâce à la fonction greatest : deux relais simultanés ne peuvent pas la ramener en arrière.
+   */
+  async function savePosition(name: string, position: number) {
+    await db
+      .insert(projections)
+      .values({ name, position })
+      .onConflictDoUpdate({
+        target: projections.name,
+        set: {
+          position: sql`greatest(${projections.position}, ${position})`,
+          updatedAt: new Date(),
+        },
+      })
+  }
+
+  return { catchUp, rebuild, positionOf, savePosition }
 }
 
 /** Type du moteur des projections, déduit de sa fabrique. */

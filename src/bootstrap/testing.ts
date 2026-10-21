@@ -1,10 +1,14 @@
 import type { AuthPort } from '@/platform/auth/port'
 import { createTestDatabase } from '@/platform/db/client'
 import { createEventStore } from '@/platform/event-store/event-store'
+import { createVillageServiceApp } from '@/services/village/village-service'
 import { createApi } from './create-api'
 
-/** Secret de test de la tâche planifiée qui distribue la boîte d'envoi. */
+/** Secret de test de la tâche planifiée qui exécute les tâches quotidiennes. */
 export const TEST_CRON_SECRET = 'secret-de-test'
+
+/** Secret partagé avec le service Village extrait, dans les tests. */
+export const TEST_SERVICE_SECRET = 'secret-de-service'
 
 /**
  * Adaptateur d'authentification réservé aux tests : le joueur est identifié par
@@ -25,12 +29,28 @@ type TestUser = string | null
  * Application complète, assemblée sur une base de test vidée, avec une horloge contrôlée
  * et l'adaptateur d'authentification de test. La base est aussi renvoyée : certains tests
  * lisent directement les tables, pour vérifier par exemple qu'une donnée a été supprimée.
+ * Avec villageService, le Village est extrait dans un service distinct (TD11), doté de sa
+ * propre base. L'application et le service s'appellent sans réseau : chacun transmet ses
+ * requêtes directement à l'autre, par la méthode request de Hono.
  */
-export async function createTestApi() {
+export async function createTestApi({ villageService = false } = {}) {
   const start = Date.UTC(2026, 0, 1)
   let now = start
   const db = await createTestDatabase()
   const store = createEventStore(db)
+
+  const serviceDb = villageService ? await createTestDatabase('village') : null
+  let serviceUp = true
+  const service = serviceDb
+    ? createVillageServiceApp({
+        db: serviceDb,
+        secret: TEST_SERVICE_SECRET,
+        appUrl: 'http://app.test',
+        clock: () => now,
+        fetch: async (input, init) => api.request(String(input), init),
+      })
+    : null
+
   const api = createApi({
     auth: testAuth,
     db,
@@ -39,6 +59,16 @@ export async function createTestApi() {
     outbox: { now: () => Date.now() + (now - start) },
     clock: () => now,
     realtime: { pollMs: 20, maxStreamMs: 150 },
+    realmService: service
+      ? {
+          url: 'http://village.test',
+          secret: TEST_SERVICE_SECRET,
+          fetch: async (input, init) => {
+            if (!serviceUp) throw new TypeError('fetch failed : service Village injoignable')
+            return service.request(String(input), init)
+          },
+        }
+      : undefined,
   })
 
   /** En-têtes identifiant le joueur, ou aucun en-tête pour une requête anonyme. */
@@ -60,5 +90,10 @@ export async function createTestApi() {
     now += minutes * 60_000
   }
 
-  return { api, db, get, post, advance }
+  /** Simule la panne du service Village extrait, ou son rétablissement. */
+  const setServiceUp = (up: boolean) => {
+    serviceUp = up
+  }
+
+  return { api, db, service, serviceDb, get, post, advance, setServiceUp }
 }
