@@ -15,6 +15,7 @@ export function createDrizzleRankingReader(db: Db, projections: ProjectionRunner
     async top(limit) {
       await projections.catchUp(rankingProjection)
 
+      const position = await projections.positionOf(rankingProjection.name)
       const rows = await db
         .select()
         .from(players)
@@ -26,7 +27,7 @@ export function createDrizzleRankingReader(db: Db, projections: ProjectionRunner
         )
         .limit(limit)
 
-      return rows.map((row, index) => ({
+      const entries = rows.map((row, index) => ({
         rank: index + 1,
         playerId: row.playerId,
         label: labelOf(row),
@@ -36,6 +37,7 @@ export function createDrizzleRankingReader(db: Db, projections: ProjectionRunner
         upgrades: row.upgrades,
         bestLoot: row.bestLoot,
       }))
+      return { position, entries }
     },
   }
 }

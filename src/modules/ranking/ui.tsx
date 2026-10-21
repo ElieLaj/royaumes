@@ -1,25 +1,65 @@
 'use client'
 import { hc } from 'hono/client'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ChannelEvent, useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
 import type { RankingApi } from './api'
-import type { RankingEntry } from './contracts'
+import { RANKING_CHANNEL, type Ranking } from './contracts'
 
 /** Client HTTP typé, déduit de la sous-application Hono du module. */
 const client = hc<RankingApi>('/api/ranking')
 
+/** Libellé affiché pour chaque état de la connexion temps réel. */
+const STATUS_LABELS = {
+  connecting: 'Connexion...',
+  open: 'Temps réel connecté',
+  reconnecting: 'Reconnexion...',
+} as const
+
+/** Délai entre deux relectures, tant que la projection n'a pas atteint l'événement annoncé. */
+const RETRY_MS = 1_000
+
+/** Nombre maximal de relectures pour un même événement annoncé. */
+const MAX_READS = 10
+
 /** Écran du Classement : les meilleurs joueurs, le joueur connecté étant mis en évidence. */
 export function RankingScreen({ userId }: { userId: string }) {
-  const [entries, setEntries] = useState<RankingEntry[] | undefined>(undefined)
+  const [ranking, setRanking] = useState<Ranking | undefined>(undefined)
 
   const refresh = useCallback(async () => {
     const res = await client.players.$get()
-    if (res.ok) setEntries((await res.json()).entries)
+    if (!res.ok) return 0
+    const body = await res.json()
+    setRanking(body)
+    return body.position
   }, [])
 
   useEffect(() => {
     refresh()
   }, [refresh])
+
+  const wanted = useRef(0)
+  const following = useRef(false)
+
+  const follow = useCallback(
+    async (event: ChannelEvent) => {
+      wanted.current = Math.max(wanted.current, event.position)
+      if (following.current) return
+      following.current = true
+      try {
+        for (let read = 0; read < MAX_READS; read++) {
+          if ((await refresh()) >= wanted.current) return
+          await new Promise((resolve) => setTimeout(resolve, RETRY_MS))
+        }
+      } finally {
+        following.current = false
+      }
+    },
+    [refresh],
+  )
+
+  const status = useChannel(RANKING_CHANNEL, follow)
+  const entries = ranking?.entries
 
   return (
     <>
@@ -27,9 +67,9 @@ export function RankingScreen({ userId }: { userId: string }) {
         <h1>
           <Entity kind="ranking" /> Classement
         </h1>
-        <button className="link" type="button" onClick={refresh}>
-          Actualiser
-        </button>
+        <span className="status" data-status={status}>
+          {STATUS_LABELS[status]}
+        </span>
       </div>
       <section className="panel" aria-label="Classement des joueurs">
         {entries?.length === 0 && <p className="muted">Aucun joueur classé pour le moment.</p>}
