@@ -13,6 +13,7 @@ export function createDispatchApi(dispatcher: Dispatcher, secret: string | undef
       return c.json({ error: { code: 'UNAUTHORIZED', message: 'Accès refusé' } }, 401)
     }
     const result = await dispatcher.dispatch()
+    /** DETTE TECHNIQUE DT-007 (docs/qualite/dette-technique.md) : messages abandonnés seulement comptés. */
     return c.json({ ...result, ...(await dispatcher.status()) })
   })
 }
