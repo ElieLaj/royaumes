@@ -24,6 +24,16 @@ export function createNotificationsPersonalData(
       const [mark] = await db.select().from(readMarks).where(eq(readMarks.playerId, playerId))
       return {
         readUntil: mark?.readUntil ?? 0,
+        offers: await db
+          .select({ offerId: offerParties.offerId, since: offerParties.createdAt })
+          .from(offerParties)
+          .where(eq(offerParties.sellerId, playerId))
+          .orderBy(asc(offerParties.createdAt)),
+        games: await db
+          .select({ gameId: gameMembers.gameId, since: gameMembers.createdAt })
+          .from(gameMembers)
+          .where(eq(gameMembers.playerId, playerId))
+          .orderBy(asc(gameMembers.createdAt)),
         notifications: await db
           .select({
             kind: notifications.kind,
