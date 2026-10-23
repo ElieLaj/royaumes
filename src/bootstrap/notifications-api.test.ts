@@ -178,17 +178,20 @@ describe('API du module Notifications', () => {
     const api = await withVillages()
     const { offerId } = await publish(api)
     await api.post(`/api/market/offers/${offerId}/accept`, {}, 'bob')
+    const open = await publish(api, { wood: 10 }, { stone: 5 })
+    const { gameId } = await (await api.post('/api/dungeon/games', {})).json()
 
     await markRead(api, 1_000_000)
 
     const exported = await (await api.get('/api/account/export')).json()
-    expect(exported.sections.notifications.notifications).toMatchObject([
-      { kind: 'trade-completed', subjectId: offerId },
-    ])
-    expect(exported.sections.notifications.readUntil).toBeGreaterThan(0)
+    const section = exported.sections.notifications
+    expect(section.notifications).toMatchObject([{ kind: 'trade-completed', subjectId: offerId }])
+    expect(section.readUntil).toBeGreaterThan(0)
+    expect(section.offers).toMatchObject([{ offerId: open.offerId }])
+    expect(section.games).toMatchObject([{ gameId }])
 
     await api.api.request('/api/account', { method: 'DELETE', headers: { 'x-test-user': 'alice' } })
-    for (const table of ['notifications', 'read_marks']) {
+    for (const table of ['notifications', 'read_marks', 'offer_parties', 'game_members']) {
       const result = await api.db.execute(sql.raw(`SELECT * FROM notifications.${table}`))
       expect((result as unknown as { rows: unknown[] }).rows).toEqual([])
     }
