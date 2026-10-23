@@ -12,7 +12,7 @@ dans le même commit que la modification qu'ils décrivent.
 ```mermaid
 flowchart TB
   joueur["Joueur<br/>[Personne]<br/>Joue depuis un navigateur,<br/>sur ordinateur ou sur téléphone"]
-  royaumes["Royaumes<br/>[Système logiciel]<br/>Jeu web multijoueur : village, donjon,<br/>classement, marché et taverne"]
+  royaumes["Royaumes<br/>[Système logiciel]<br/>Jeu web multijoueur : village, donjon,<br/>classement, marché, taverne et notifications"]
   joueur -->|"Gère son village, joue avec les autres joueurs,<br/>reçoit les changements en direct (HTTPS)"| royaumes
 ```
 
@@ -28,7 +28,7 @@ flowchart TB
   subgraph royaumes["Système Royaumes"]
     web["Interface web<br/>[Conteneur : React, dans le navigateur]<br/>Pages du jeu et page de connexion"]
     serveur["Application serveur<br/>[Conteneur : Next.js et Hono, fonctions Vercel, Francfort]<br/>Rendu des pages, API JSON,<br/>authentification, flux temps réel"]
-    base[("Base de données<br/>[Conteneur : PostgreSQL, Neon, Francfort]<br/>Schéma platform : journal, points de reprise,<br/>boîte d'envoi, registre des effacements<br/>Schéma identity : comptes et sessions<br/>Schémas ranking, dungeon et market :<br/>modèles de lecture<br/>Schéma tavern : messages et présence")]
+    base[("Base de données<br/>[Conteneur : PostgreSQL, Neon, Francfort]<br/>Schéma platform : journal, points de reprise,<br/>boîte d'envoi, registre des effacements<br/>Schéma identity : comptes et sessions<br/>Schémas ranking, dungeon et market :<br/>modèles de lecture<br/>Schéma tavern : messages et présence<br/>Schéma notifications : fil des joueurs,<br/>positions de lecture")]
   end
   joueur -->|"Utilise"| web
   web -->|"Pages, appels de l'API avec le cookie de session<br/>(HTTPS, JSON)"| serveur
@@ -47,6 +47,11 @@ La Taverne n'enregistre pas d'événements : ses tables sont sa propre source de
 Les tables des schémas `ranking`, `dungeon` et `market` sont des modèles de lecture, dérivés du
 journal par des projections : elles peuvent être vidées puis reconstruites à tout moment, sans
 perte d'information.
+
+Le schéma `notifications` est de même nature : le module n'enregistre aucun événement, et son fil
+est tiré de ceux du Marché et du Donjon par une projection (ADR 0010). Une exception : la table des
+positions de lecture, propre à chaque joueur, n'est pas dérivée du journal, et la reconstruction de la
+projection n'y touche pas.
 
 L'interface web ne communique jamais directement avec la base : toute lecture et toute
 écriture passent par l'application serveur, qui applique le contrôle d'accès.
@@ -68,6 +73,7 @@ flowchart TB
     ranking["ranking<br/>Classement : projection,<br/>lecture, API, canal global"]
     market["market<br/>Marché : orchestrateur de la saga,<br/>projection des offres, API, canal global"]
     tavern["tavern<br/>Taverne : messages et présence<br/>en tables, API, canal à source propre"]
+    notifications["notifications<br/>Notifications : domaine, service,<br/>projection du Marché et du Donjon,<br/>tables, API, canal global discret"]
   end
   subgraph platform["src/platform"]
     auth["auth<br/>Port AuthPort,<br/>adaptateur Better Auth"]
@@ -84,13 +90,15 @@ flowchart TB
   route --> server
   pages --> server
   server --> createapi
-  createapi --> system & realm & dungeon & ranking & market & tavern & auth & http & realtime & projection & outbox & privacy & cron
+  createapi --> system & realm & dungeon & ranking & market & tavern & notifications & auth & http & realtime & projection & outbox & privacy & cron
   realm --> store & projection & realtime & http & outbox
   market --> store & projection & realtime & http & outbox
   dungeon --> store & projection & realtime & http
   ranking --> projection & realtime & http
   tavern --> realtime & http & db
-  realm & dungeon & market & ranking & tavern --> privacy
+  notifications --> projection & realtime & http & db
+  notifications -->|"lit le langage publié<br/>(contrats seulement)"| market & dungeon
+  realm & dungeon & market & ranking & tavern & notifications --> privacy
   privacy --> store
   auth --> privacy
   realtime --> store & http
@@ -111,6 +119,16 @@ dans leurs propres tables, au sein de la transaction fournie par le moteur des p
 Le module `ranking` lit des événements du Village et du Donjon, mais n'importe aucun de leurs
 fichiers en dehors de leurs contrats : il ne dépend que de leur langage publié, c'est-à-dire
 du nom et des données de leurs événements, ainsi que du préfixe de leurs flux.
+
+Le module `notifications` communique de la même façon avec le Marché et le Donjon : il lit leur langage
+publié (`OfferPublished`, `TradeCompleted`, `OfferWithdrawn` et `OfferRejected` pour le Marché,
+`GameCreated`, `PlayerJoined` et `GameEnded` pour le Donjon), et n'importe de ces deux modules que leurs
+contrats, pour le préfixe de leurs flux. Sa projection en tire le fil de chaque joueur, et retient le
+vendeur de chaque offre et les joueurs de chaque expédition, que les événements finaux ne désignent pas.
+Aucun message ne passe par la boîte d'envoi : ni le Marché ni le Donjon ne savent que leurs événements
+sont lus, et le module ne leur demande rien (ADR 0011). Une notification apparaît au rattrapage suivant
+de la projection, au plus tard à la prochaine consultation du fil. Son canal temps réel est global et
+discret : il annonce qu'un événement notifiable a eu lieu, et chaque navigateur relit son propre fil.
 
 Le module `market` modifie les villages sans jamais importer le code du Village : il enregistre
 des messages dans la boîte d'envoi, que le distributeur remet aux gestionnaires du Village.
@@ -135,12 +153,51 @@ dependency-cruiser (`.dependency-cruiser.cjs`) à chaque exécution de `pnpm ver
 - aucune dépendance circulaire n'est admise ;
 - un module n'importe jamais les tables de la plateforme : il passe par ses fonctions.
 
-Deux fonctions d'aptitude complètent ces règles, sous la forme de tests
+Trois fonctions d'aptitude complètent ces règles, sous la forme de tests
 (`src/bootstrap/architecture.test.ts`) : chaque table est rangée dans le schéma d'une brique
-de la plateforme ou d'un module, et chaque module qui conserve des données déclare ses
-données personnelles.
+de la plateforme ou d'un module, chaque module qui conserve des données déclare ses
+données personnelles, et chaque type d'événement que lisent les Notifications est encore publié
+par le domaine du Marché ou du Donjon.
 
 Seule la racine de composition connaît à la fois la plateforme et l'ensemble des modules.
+
+## Parcours : une offre conclue notifie son vendeur
+
+Ce parcours traverse le Marché, le Village et les Notifications. Bob accepte l'offre qu'Alice a publiée ;
+l'échange est une saga entre le Marché et le Village (ADR 0007), et Alice, connectée, voit apparaître la
+notification sans recharger la page. Les Notifications n'interviennent à aucune étape de la saga : elles
+lisent seulement l'événement qui la conclut.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Bob as Bob, acheteur
+  participant M as Marché
+  participant O as Boîte d'envoi
+  participant V as Village
+  participant J as Journal
+  participant N as Notifications
+  actor Alice as Alice, vendeuse
+
+  Bob->>M: POST /api/market/offers/:id/accept
+  M->>J: OfferAccepted
+  M->>O: prélever le paiement de Bob, dans la même transaction
+  O->>V: message de prélèvement
+  V-->>O: résultat du prélèvement
+  O->>M: résultat reçu
+  M->>J: TradeCompleted
+  M->>O: verser aux deux joueurs, dans la même transaction
+  O->>V: messages de versement
+  J-->>Alice: canal notifications, TradeCompleted sans données
+  Alice->>N: GET /api/notifications
+  N->>J: rattrapage de la projection
+  J-->>N: TradeCompleted, après OfferPublished qui a désigné le vendeur
+  N-->>Alice: fil à jour, une notification non lue
+```
+
+Bob n'est pas notifié : il a reçu la réponse de sa propre action. Si la saga est interrompue après
+`TradeCompleted`, les versements sont repris par la boîte d'envoi, et la notification n'est pas affectée.
+Si le paiement est refusé, aucun `TradeCompleted` n'est enregistré, et personne n'est notifié.
 
 ## Extraction du Village
 
@@ -186,9 +243,9 @@ Chaque envoi sur la branche `main` déclenche un déploiement. Le code n'est pub
 l'ensemble des contrôles a réussi, et les migrations ne sont appliquées qu'après ces contrôles.
 
 La tâche planifiée, déclarée dans `vercel.json`, exécute chaque jour les tâches quotidiennes :
-la distribution des messages restés en attente dans la boîte d'envoi, et l'application des
-durées de conservation de la Taverne, et la suppression des sessions expirées. Elle ne s'exécute que
-sur le déploiement de production.
+la distribution des messages restés en attente dans la boîte d'envoi, l'application des
+durées de conservation de la Taverne et des Notifications, et la suppression des sessions expirées.
+Elle ne s'exécute que sur le déploiement de production.
 
 Le service Village extrait n'est pas déployé : en production, le Village s'exécute dans
 les fonctions Vercel, comme les autres modules (ADR 0009).

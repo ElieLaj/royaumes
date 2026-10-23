@@ -66,6 +66,7 @@ docs/
   adr/                Décisions d'architecture
   qualite/            Dette technique et revues
   rgpd/               Registre des traitements et revue de conformité
+  evaluation/         Fiche de cadrage et document de rendu de l'évaluation
   architecture.md     Description de l'architecture (modèle C4)
   bilan-technique.md  Bilan technique du projet
 ```
@@ -81,6 +82,7 @@ Un module n'est accessible depuis l'extérieur que par ses entrées publiques : 
 | `ranking` | Classement des joueurs, construit à partir des événements du Village et du Donjon | `/api/ranking` |
 | `market` | Marché : échanges de ressources entre joueurs, par une saga orchestrée | `/api/market` |
 | `tavern` | Taverne : salon de discussion commun et présence des joueurs, sans Event Sourcing | `/api/tavern` |
+| `notifications` | Notifications : fil des offres conclues ou expirées et des expéditions terminées, construit à partir des événements du Marché et du Donjon | `/api/notifications` |
 
 ## Temps réel
 
@@ -89,17 +91,19 @@ Les changements sont diffusés aux navigateurs par des Server-Sent Events, à l'
 la règle du module concerné. Le canal `village-<joueur>` n'est ainsi accessible qu'au
 propriétaire du village, et le canal `dungeon-<expédition>` aux seuls membres de l'expédition.
 
-La plupart des canaux correspondent à un flux du journal d'événements. Les canaux `ranking`
-et `market` sont des canaux globaux : ils suivent, dans tout le journal, les événements qui
-modifient le classement ou la liste des offres, et ne transmettent que ceux qui sont
-enregistrés après leur ouverture.
+La plupart des canaux correspondent à un flux du journal d'événements. Les canaux `ranking`,
+`market` et `notifications` sont des canaux globaux : ils suivent, dans tout le journal, les
+événements qui modifient le classement, la liste des offres ou le fil des notifications, et ne
+transmettent que ceux qui sont enregistrés après leur ouverture.
 
 Le canal `tavern` ne lit pas le journal, mais la table des messages de la Taverne : il
 transmet chaque nouveau message, avec son contenu, à tous les joueurs connectés.
 
-Les canaux du Donjon, du Classement et du Marché sont discrets : ils ne transmettent que la position,
-le type et la version des événements, et chaque navigateur relit sa propre vue, filtrée
-par le serveur.
+Les canaux du Donjon, du Classement, du Marché et des Notifications sont discrets : ils ne
+transmettent que la position, le type et la version des événements, et chaque navigateur relit sa
+propre vue, filtrée par le serveur. Le canal `notifications` est ouvert à tout joueur connecté, et
+à lui seul : il annonce les événements qui produisent une notification, sans en désigner le
+destinataire (ADR 0011).
 
 Un flux se ferme de lui-même au bout de 240 secondes, et le navigateur s'y reconnecte
 sans perte d'événement. En développement, la variable `STREAM_MAX_SECONDS` permet de
@@ -142,8 +146,11 @@ page « Mes données » :
   d'événements (ADR 0008). Chaque effacement est consigné dans `platform.erasures`.
 
 Les messages de la Taverne sont conservés trente jours, et la présence d'un joueur deux
-minutes après son dernier signal. Ces durées sont appliquées à chaque lecture, et chaque jour
-par la tâche planifiée `/api/cron/daily`, qui supprime aussi les sessions expirées.
+minutes après son dernier signal. Les notifications sont conservées trente jours, sans nom d'un
+autre joueur ; la position de lecture de chaque joueur l'est jusqu'à la suppression de son
+compte, qui efface aussi ses notifications (ADR 0010). Ces durées sont appliquées à chaque
+lecture, et chaque jour par la tâche planifiée `/api/cron/daily`, qui supprime aussi les
+sessions expirées.
 
 ## Base de données
 
@@ -153,8 +160,9 @@ démarrage. Pour repartir d'une base vide, arrêtez le serveur et supprimez le r
 
 Les tests utilisent une base PGlite en mémoire, recréée pour chaque fichier de test.
 
-Le classement et la liste des expéditions ouvertes sont des modèles de lecture, tenus à jour
-par des projections à partir du journal d'événements (ADR 0006). Chaque projection est
+Le classement, la liste des expéditions ouvertes et le fil des notifications sont des modèles de
+lecture, tenus à jour par des projections à partir du journal d'événements (ADR 0006 et 0010). Chaque
+projection est
 rattrapée à la consultation, et reconstruite automatiquement lorsque sa version change :
 une modification qui change le contenu de ses tables doit donc augmenter sa version.
 
@@ -167,7 +175,9 @@ Le script `scripts/load-test.ts` mesure le débit et les latences des principale
 sous une charge de vingt connexions simultanées, et confronte les résultats au budget de
 performance de `perf/budget.json` : 99 % des lectures servies en moins de 500 ms, sans
 erreur. Il est exécuté sur la construction de production, base recréée, avec
-`AUTH_RATE_LIMIT=off`, avant chaque publication qui touche aux performances.
+`AUTH_RATE_LIMIT=off`, avant chaque publication qui touche aux performances. La lecture du fil
+des notifications y figure, et dépasse le budget : son p99 est de 552 ms (`perf/notifications.json`,
+DT-016).
 
 ## Déploiement
 
@@ -188,9 +198,11 @@ sans la première ; sans la seconde, la route des tâches quotidiennes reste fer
 - [Revue de sécurité de l'authentification](docs/qualite/revue-securite-authentification.md)
 - [Revue de sécurité du Donjon](docs/qualite/revue-securite-donjon.md)
 - [Revue de sécurité du Marché](docs/qualite/revue-securite-marche.md)
+- [Revue de sécurité des Notifications](docs/qualite/revue-securite-notifications.md)
 - [Registre des traitements](docs/rgpd/registre-traitements.md)
 - [Revue de conformité au RGPD](docs/rgpd/revue-conformite.md)
 - [Bilan technique](docs/bilan-technique.md)
+- [Évaluation : fiche de cadrage](docs/evaluation/fiche-cadrage.md) et [document de rendu](docs/evaluation/rendu.md)
 
 ## Conventions
 
@@ -216,6 +228,13 @@ d'une projection a lieu pendant une consultation : sa durée croît avec la tail
 Une offre échue n'est plus proposée ni acceptée, mais ses ressources ne sont restituées au
 vendeur qu'à la consultation suivante du Marché, ou au plus tard lors de la tâche planifiée
 quotidienne.
+
+Les notifications apparaissent au rattrapage suivant de leur projection, au plus tard à la
+consultation suivante du fil, et une offre expirée n'est notifiée qu'une fois constatée par le
+Marché. Le canal des notifications est global : chaque joueur connecté relit son fil à chaque
+notification produite pour n'importe quel joueur (DT-015). La lecture du fil exécute cinq requêtes
+SQL et dépasse le budget de performance (DT-016). Un corps JSON mal formé produit une erreur 500
+au lieu de 400, sur toutes les routes qui valident un corps (DT-017).
 
 L'effacement d'un compte parcourt tout le journal d'événements : sa durée croît avec la taille
 du journal. L'identifiant d'un joueur effacé reste dans le journal, sous une forme
