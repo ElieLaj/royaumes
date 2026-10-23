@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
+  advanceRead,
   expiredBefore,
   FEED_SIZE,
   feedOf,
   type Notification,
   notificationsFor,
   RETENTION_MS,
+  unreadCount,
 } from './notification'
 
 const T0 = Date.UTC(2026, 0, 1)
@@ -102,5 +104,26 @@ describe('Notifications - le fil', () => {
 
     expect(expiredBefore(now)).toBe(T0 + 1)
     expect(feedOf([old, recent], now).map((n) => n.position)).toEqual([2])
+  })
+})
+
+describe('Notifications - la lecture', () => {
+  it('compte les notifications postérieures à la position de lecture', () => {
+    const all = [note(3), note(5), note(8)]
+
+    expect(unreadCount(all, 0)).toBe(3)
+    expect(unreadCount(all, 5)).toBe(1)
+    expect(unreadCount(all, 8)).toBe(0)
+  })
+
+  it('ne recule jamais la position de lecture', () => {
+    expect(advanceRead(8, 3, 10)).toBe(8)
+    expect(advanceRead(8, 8, 10)).toBe(8)
+    expect(advanceRead(8, 9, 10)).toBe(9)
+  })
+
+  it('ramène la position demandée à la dernière notification du joueur', () => {
+    expect(advanceRead(0, 1_000_000, 8)).toBe(8)
+    expect(advanceRead(0, 5, 0)).toBe(0)
   })
 })
