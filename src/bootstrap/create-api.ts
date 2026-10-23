@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { createDungeonModule } from '@/modules/dungeon'
 import { createMarketModule } from '@/modules/market'
+import { createNotificationsModule } from '@/modules/notifications'
 import { createRankingModule } from '@/modules/ranking'
 import { createRealmModule, createRemoteRealmModule } from '@/modules/realm'
 import { createSystemModule } from '@/modules/system'
@@ -83,6 +84,7 @@ export function createApi({
     clock,
   })
   const tavern = createTavernModule({ db, clock })
+  const notifications = createNotificationsModule({ db, projections, clock })
 
   /**
    * Droits des joueurs : chaque module fournit ses données personnelles. L'identité vient en
@@ -96,6 +98,7 @@ export function createApi({
       market.personalData,
       ranking.personalData,
       tavern.personalData,
+      notifications.personalData,
       createIdentityPersonalData(db),
     ],
     clock,
@@ -165,6 +168,8 @@ export function createApi({
   app.use('/ranking/*', requireUser(auth))
   app.use('/market/*', requireUser(auth))
   app.use('/tavern/*', requireUser(auth))
+  app.use('/notifications', requireUser(auth))
+  app.use('/notifications/*', requireUser(auth))
   app.use('/account', requireUser(auth))
   app.use('/account/*', requireUser(auth))
   app.use('/stream/*', requireUser(auth))
@@ -178,6 +183,7 @@ export function createApi({
     .route('/ranking', ranking.api)
     .route('/market', market.api)
     .route('/tavern', tavern.api)
+    .route('/notifications', notifications.api)
     .route('/account', createPrivacyApi(privacy))
     .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
