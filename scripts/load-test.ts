@@ -4,7 +4,7 @@
  *   pnpm build && AUTH_RATE_LIMIT=off pnpm start     dans un premier terminal
  *   pnpm exec tsx scripts/load-test.ts [étiquette]   dans un second terminal
  *
- * Le script prépare un jeu de données (joueurs, villages, expéditions, offres, messages),
+ * Le script prépare un jeu de données (joueurs, villages, expéditions, offres, échanges, messages),
  * puis mesure, pour chaque scénario, le débit et les centiles de latence. Les résultats sont
  * affichés, et enregistrés dans perf/<étiquette>.json pour être comparés d'une mesure à l'autre.
  * Ils sont enfin confrontés au budget de performance, fixé dans perf/budget.json : le script
@@ -52,13 +52,23 @@ async function signUp(n: number) {
 
 /** Jeu de données : chaque joueur fonde un village, ouvre une expédition, publie une offre et écrit un message. */
 const cookies: string[] = []
+const offerIds: string[] = []
 for (let n = 0; n < PLAYERS; n++) {
   const cookie = await signUp(n)
   cookies.push(cookie)
   await call('/api/realm/village', 'POST', cookie, { name: `Village ${n}` })
   await call('/api/dungeon/games', 'POST', cookie, { difficulty: 'easy' })
-  await call('/api/market/offers', 'POST', cookie, { give: { wood: 10 }, want: { stone: 5 } })
+  const offer = await call('/api/market/offers', 'POST', cookie, {
+    give: { wood: 10 },
+    want: { stone: 5 },
+  })
+  offerIds.push(((await offer.json()) as { offerId: string }).offerId)
   await call('/api/tavern/messages', 'POST', cookie, { body: `Bonjour de ${n}` })
+}
+
+/** Chaque joueur accepte l'offre du suivant : le fil de chaque vendeur compte une notification. */
+for (let n = 0; n < PLAYERS; n++) {
+  await call(`/api/market/offers/${offerIds[(n + 1) % PLAYERS]}/accept`, 'POST', cookies[n])
 }
 
 /** Scénarios : les lectures que chaque joueur déclenche le plus souvent. */
@@ -68,6 +78,7 @@ const scenarios = [
   { name: 'Classement', path: '/api/ranking/players' },
   { name: 'Marché', path: '/api/market/offers' },
   { name: 'Taverne', path: '/api/tavern/messages' },
+  { name: 'Notifications', path: '/api/notifications' },
 ]
 
 const results = []
