@@ -114,3 +114,7 @@ input.amount { width: 5em; }
 .presence { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 
 a.button { display: inline-block; padding: 8px 14px; border-radius: 8px; background: var(--accent); color: white; text-decoration: none; }
+
+.notifications { list-style: none; padding: 0; margin: 12px 0 0; display: grid; gap: 8px; }
+.notifications li { display: flex; justify-content: space-between; gap: 12px; }
+.notifications li[data-unread] { font-weight: 600; }
