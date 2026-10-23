@@ -4,6 +4,9 @@
 - Périmètre : données personnelles de l'ensemble du jeu, export et effacement, durées de conservation, journaux techniques.
 - Références : RGPD, articles 5, 15, 17, 20, 25 et 30 ; registre des traitements ; ADR 0008.
 - Mise à jour du TD11 : R8 et R9, non conformes à l'origine, ont été remboursées (DT-008, DT-009) et revérifiées.
+- Mise à jour de l'évaluation : le module Notifications ajoute quatre tables, qui figurent au registre
+  (T8). Leur export, leur effacement et leur conservation sont vérifiés par la revue de sécurité des
+  Notifications (N9, N10) ; les constats ci-dessous, datés du 21 octobre, n'ont pas été rejoués.
 - Méthode : tests Vitest (221 réussis), lecture du code et de la bibliothèque d'authentification, puis
   vérifications sur un serveur local avec des comptes jetables, créés par l'inscription réelle, et une
   base jetable supprimée ensuite : parcours à deux joueurs par l'API et dans le navigateur, export,
