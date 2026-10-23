@@ -124,6 +124,9 @@ describe('API du module Notifications', () => {
     const api = await createTestApi()
     expect((await markRead(api, -1)).status).toBe(400)
     expect((await markRead(api, 'tout')).status).toBe(400)
+    expect((await markRead(api, 1.5)).status).toBe(400)
+    expect((await api.post('/api/notifications/read', {}, 'alice')).status).toBe(400)
+    expect((await api.post('/api/notifications/read', [1], 'alice')).status).toBe(400)
     expect((await markRead(api, 1, null as unknown as string)).status).toBe(401)
   })
 
