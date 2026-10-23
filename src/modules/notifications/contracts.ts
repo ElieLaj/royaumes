@@ -31,6 +31,16 @@ export interface Feed {
   notifications: NotificationView[]
 }
 
+/**
+ * Types d'événements que le module lit dans le journal, par module d'origine : le langage publié
+ * du Marché et du Donjon dont il dépend. Une fonction d'aptitude vérifie que ces modules les
+ * publient encore, de sorte qu'un événement renommé ne rende pas le fil silencieusement muet.
+ */
+export const SOURCE_EVENTS = {
+  market: ['OfferPublished', 'TradeCompleted', 'OfferWithdrawn', 'OfferRejected'],
+  dungeon: ['GameCreated', 'PlayerJoined', 'GameEnded'],
+} as const
+
 /** Nom du canal temps réel du module, qui ne correspond à aucun flux du journal. */
 export const NOTIFICATIONS_CHANNEL = 'notifications'
 

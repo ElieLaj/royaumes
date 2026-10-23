@@ -3,6 +3,7 @@ import { GAME_CHANNEL_PREFIX } from '@/modules/dungeon/contracts'
 import { OFFER_STREAM_PREFIX } from '@/modules/market/contracts'
 import type { StoredEvent } from '@/platform/event-store/event-store'
 import type { DbTransaction, Projection } from '@/platform/projection/projection'
+import { SOURCE_EVENTS } from '../contracts'
 import { type Fact, type Notification, notificationsFor } from '../domain/notification'
 import { gameMembers, notifications, offerParties } from './schema'
 
@@ -51,15 +52,7 @@ async function save(tx: DbTransaction, produced: Notification[]) {
 export const notificationsProjection: Projection = {
   name: 'notifications',
   version: 1,
-  eventTypes: [
-    'OfferPublished',
-    'TradeCompleted',
-    'OfferWithdrawn',
-    'OfferRejected',
-    'GameCreated',
-    'PlayerJoined',
-    'GameEnded',
-  ],
+  eventTypes: [...SOURCE_EVENTS.market, ...SOURCE_EVENTS.dungeon],
 
   async apply(event, tx) {
     switch (event.type) {
