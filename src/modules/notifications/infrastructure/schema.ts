@@ -41,6 +41,15 @@ export const offerParties = notificationsSchema.table(
   (t) => [index('offer_parties_created_at_idx').on(t.createdAt)],
 )
 
+/**
+ * Position de lecture de chaque joueur : ses notifications postérieures sont non lues. Elle n'est
+ * pas dérivée du journal : la reconstruction de la projection n'y touche pas.
+ */
+export const readMarks = notificationsSchema.table('read_marks', {
+  playerId: text('player_id').primaryKey(),
+  readUntil: bigint('read_until', { mode: 'number' }).notNull().default(0),
+})
+
 /** Joueurs de chaque expédition en cours, retenus jusqu'à sa fin, compagnons exclus. */
 export const gameMembers = notificationsSchema.table(
   'game_members',

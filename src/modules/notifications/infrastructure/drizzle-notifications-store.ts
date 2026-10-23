@@ -1,10 +1,10 @@
-import { and, eq, gte } from 'drizzle-orm'
+import { and, eq, gte, sql } from 'drizzle-orm'
 import type { Db } from '@/platform/db/client'
 import type { ProjectionRunner } from '@/platform/projection/projection'
 import type { NotificationsStore } from '../application/notifications-store'
 import type { Notification } from '../domain/notification'
 import { notificationsProjection } from './notifications-projection'
-import { notifications } from './schema'
+import { notifications, readMarks } from './schema'
 
 /** Adaptateur du port NotificationsStore, fondé sur la table des notifications. */
 export function createDrizzleNotificationsStore(
@@ -20,7 +20,22 @@ export function createDrizzleNotificationsStore(
         .select()
         .from(notifications)
         .where(and(eq(notifications.recipientId, playerId), gte(notifications.occurredAt, since)))
-      return { position, notifications: rows as Notification[] }
+      const [mark] = await db.select().from(readMarks).where(eq(readMarks.playerId, playerId))
+      return {
+        position,
+        notifications: rows as Notification[],
+        readUntil: mark?.readUntil ?? 0,
+      }
+    },
+
+    async saveReadUntil(playerId, readUntil) {
+      await db
+        .insert(readMarks)
+        .values({ playerId, readUntil })
+        .onConflictDoUpdate({
+          target: readMarks.playerId,
+          set: { readUntil: sql`greatest(${readMarks.readUntil}, ${readUntil})` },
+        })
     },
   }
 }
