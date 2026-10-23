@@ -15,4 +15,9 @@ export interface NotificationsStore {
   ): Promise<{ position: number; notifications: Notification[]; readUntil: number }>
   /** Avance la position de lecture d'un joueur ; elle ne recule jamais, même en cas d'accès simultanés. */
   saveReadUntil(playerId: string, readUntil: number): Promise<void>
+  /**
+   * Supprime les notifications, et les lignes de correspondance, antérieures à l'instant before ;
+   * renvoie leur nombre.
+   */
+  removeOlderThan(before: number): Promise<{ notifications: number; parties: number }>
 }

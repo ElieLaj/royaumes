@@ -31,6 +31,9 @@ export interface Feed {
   notifications: NotificationView[]
 }
 
+/** Nom du canal temps réel du module, qui ne correspond à aucun flux du journal. */
+export const NOTIFICATIONS_CHANNEL = 'notifications'
+
 /** Corps attendu pour marquer des notifications comme lues : la position jusqu'où elles le sont. */
 export const ReadInput = z.object({ upTo: z.number().int().nonnegative() })
 

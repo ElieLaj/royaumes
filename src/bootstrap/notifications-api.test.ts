@@ -4,7 +4,7 @@ import type { OfferView } from '@/modules/market/contracts'
 import type { Feed, ReadResult } from '@/modules/notifications/contracts'
 import { notificationsProjection } from '@/modules/notifications/infrastructure/notifications-projection'
 import { createProjectionRunner } from '@/platform/projection/projection'
-import { createTestApi } from './testing'
+import { createTestApi, TEST_CRON_SECRET } from './testing'
 
 type TestApi = Awaited<ReturnType<typeof createTestApi>>
 
@@ -138,6 +138,40 @@ describe('API du module Notifications', () => {
 
     expect(await feed(api, 'alice')).toEqual(before)
     expect(before.unread).toBe(0)
+  })
+
+  it('annonce sur son canal les événements notifiables, sans leurs données', async () => {
+    const api = await withVillages()
+    const { offerId } = await publish(api)
+    await api.post(`/api/market/offers/${offerId}/accept`, {}, 'bob')
+
+    const res = await api.get('/api/stream/notifications/events?after=0', 'carol')
+    const { events } = (await res.json()) as { events: { type: string; data: object }[] }
+    expect(events.map((event) => event.type)).toEqual(['TradeCompleted'])
+    expect(events[0].data).toEqual({})
+  })
+
+  it("réserve le canal aux joueurs connectés, et n'en ouvre qu'un", async () => {
+    const api = await createTestApi()
+    expect((await api.get('/api/stream/notifications/events', null)).status).toBe(401)
+    expect((await api.get('/api/stream/notifications-bob/events', 'alice')).status).toBe(403)
+  })
+
+  it('applique chaque jour la conservation, même sans consultation du fil', async () => {
+    const api = await withVillages()
+    const { offerId } = await publish(api)
+    await api.post(`/api/market/offers/${offerId}/accept`, {}, 'bob')
+    await publish(api, { wood: 10 }, { stone: 5 })
+    expect(await feedOf(api, 'alice')).toHaveLength(1)
+    api.advance(400 * 24 * 60)
+
+    const res = await api.api.request('/api/cron/daily', {
+      headers: { authorization: `Bearer ${TEST_CRON_SECRET}` },
+    })
+    const reports = await res.json()
+    expect(reports.notifications).toEqual({ ok: true, result: { notifications: 1, parties: 1 } })
+    const left = await api.db.execute(sql`SELECT * FROM notifications.notifications`)
+    expect((left as unknown as { rows: unknown[] }).rows).toEqual([])
   })
 
   it('exporte les notifications du joueur, puis les efface avec son compte', async () => {

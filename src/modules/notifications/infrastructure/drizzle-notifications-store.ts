@@ -1,10 +1,10 @@
-import { and, eq, gte, sql } from 'drizzle-orm'
+import { and, eq, gte, lt, sql } from 'drizzle-orm'
 import type { Db } from '@/platform/db/client'
 import type { ProjectionRunner } from '@/platform/projection/projection'
 import type { NotificationsStore } from '../application/notifications-store'
 import type { Notification } from '../domain/notification'
 import { notificationsProjection } from './notifications-projection'
-import { notifications, readMarks } from './schema'
+import { gameMembers, notifications, offerParties, readMarks } from './schema'
 
 /** Adaptateur du port NotificationsStore, fondé sur la table des notifications. */
 export function createDrizzleNotificationsStore(
@@ -36,6 +36,22 @@ export function createDrizzleNotificationsStore(
           target: readMarks.playerId,
           set: { readUntil: sql`greatest(${readMarks.readUntil}, ${readUntil})` },
         })
+    },
+
+    async removeOlderThan(before) {
+      const removed = await db
+        .delete(notifications)
+        .where(lt(notifications.occurredAt, before))
+        .returning({ position: notifications.position })
+      const offers = await db
+        .delete(offerParties)
+        .where(lt(offerParties.createdAt, before))
+        .returning({ id: offerParties.offerId })
+      const games = await db
+        .delete(gameMembers)
+        .where(lt(gameMembers.createdAt, before))
+        .returning({ id: gameMembers.gameId })
+      return { notifications: removed.length, parties: offers.length + games.length }
     },
   }
 }
