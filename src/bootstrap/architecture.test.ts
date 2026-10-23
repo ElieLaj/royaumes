@@ -1,7 +1,8 @@
-import { existsSync, readdirSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
+import { SOURCE_EVENTS } from '@/modules/notifications/contracts'
 import { createTestDatabase } from '@/platform/db/client'
 
 /** Répertoires des modules métier. */
@@ -31,6 +32,19 @@ describe("Fonctions d'aptitude", () => {
     for (const module of withData) {
       const file = path.join(process.cwd(), 'src/modules', module, 'personal-data.ts')
       expect(existsSync(file), `${module} n'a pas de fichier personal-data.ts`).toBe(true)
+    }
+  })
+
+  it('lit des événements que les modules sources publient encore', () => {
+    for (const [module, types] of Object.entries(SOURCE_EVENTS)) {
+      const dir = path.join(process.cwd(), 'src/modules', module, 'domain')
+      const source = readdirSync(dir)
+        .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+        .map((file) => readFileSync(path.join(dir, file), 'utf8'))
+        .join('\n')
+      for (const type of types) {
+        expect(source, `${module} ne publie plus l'événement ${type}`).toContain(`type: '${type}'`)
+      }
     }
   })
 })
