@@ -40,7 +40,14 @@ export function createNotificationsService(store: NotificationsStore, clock = ()
     return { readUntil: next, unread: unreadCount(kept, next) }
   }
 
-  return { feed, markRead }
+  /**
+   * Tâche quotidienne : applique la durée de conservation, même si personne ne consulte son fil,
+   * et supprime les lignes de correspondance d'offres ou d'expéditions restées sans fin.
+   * Renvoie le nombre de lignes supprimées.
+   */
+  const purge = () => store.removeOlderThan(expiredBefore(clock()))
+
+  return { feed, markRead, purge }
 }
 
 export type NotificationsService = ReturnType<typeof createNotificationsService>
