@@ -4,6 +4,7 @@ import {
   createEventStore,
   type EventStore,
   type NewEvent,
+  type StoredEvent,
 } from '@/platform/event-store/event-store'
 import { createProjectionRunner } from '@/platform/projection/projection'
 import type { NotificationsStore } from '../application/notifications-store'
@@ -89,6 +90,29 @@ describe('Projection des notifications', () => {
     expect(await feedOf('bob')).toEqual(expected)
     expect(await feedOf('companion-1')).toEqual([])
     expect(await db.select().from(gameMembers)).toEqual([])
+  })
+
+  it('ne crée aucun doublon lorsque les mêmes événements sont rejoués', async () => {
+    const stored = (position: number, stream: string, event: NewEvent): StoredEvent => ({
+      ...event,
+      position,
+      stream,
+      version: position,
+      occurredAt: new Date(T0),
+    })
+    const events = [
+      stored(1, 'market-o1', published('alice')),
+      stored(2, 'market-o1', completed),
+      stored(3, 'dungeon-g1', created('alice')),
+      stored(4, 'dungeon-g1', ended('won')),
+    ]
+
+    await db.transaction(async (tx) => {
+      for (const event of [...events, ...events]) await notificationsProjection.apply(event, tx)
+    })
+
+    const kinds = (await feedOf('alice')).map(({ kind }) => kind)
+    expect(kinds.sort()).toEqual(['game-ended', 'trade-completed'])
   })
 
   it('redonne le même fil lorsque la projection est reconstruite', async () => {
