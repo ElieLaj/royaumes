@@ -128,6 +128,7 @@ export function createApi({
 
   // 3. Toute erreur non prévue produit une réponse JSON uniforme,
   //    sans divulguer de détail technique au client.
+  /** DETTE TECHNIQUE DT-017 (docs/qualite/dette-technique.md) : un corps JSON mal formé produit une erreur 500, et non 400. */
   app.onError((error, c) => {
     console.error(describeError(error))
     return c.json({ error: { code: 'INTERNAL', message: 'Erreur interne' } }, 500)
