@@ -6,7 +6,10 @@ import type { Notification } from '../domain/notification'
 import { notificationsProjection } from './notifications-projection'
 import { gameMembers, notifications, offerParties, readMarks } from './schema'
 
-/** Adaptateur du port NotificationsStore, fondé sur la table des notifications. */
+/**
+ * Adaptateur du port NotificationsStore, fondé sur la table des notifications.
+ * DETTE TECHNIQUE DT-016 (docs/qualite/dette-technique.md) : cinq requêtes SQL par lecture du fil.
+ */
 export function createDrizzleNotificationsStore(
   db: Db,
   projections: ProjectionRunner,
