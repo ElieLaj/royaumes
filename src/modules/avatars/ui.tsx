@@ -4,7 +4,14 @@ import Image from 'next/image'
 import { type CSSProperties, useEffect, useMemo, useRef, useState } from 'react'
 import { useTavernState } from '@/modules/tavern/ui'
 import type { AvatarsApi } from './api'
-import { defaultSkin, LOOKUP_MAX, SKIN_LOOKS, SKINS, type Skin } from './contracts'
+import {
+  defaultSkin,
+  LOOKUP_MAX,
+  SKIN_LOOKS,
+  SKINS,
+  SKINS_REFRESH_MS,
+  type Skin,
+} from './contracts'
 import { BUBBLE_MS, type Spoken, visibleBubble } from './domain/bubble'
 import { type Facing, planMove, startPosition } from './domain/wander'
 
@@ -107,7 +114,7 @@ function Character({ id, name, skin, bubble, mine, still }: CharacterProps) {
  * Scène des personnages, au bas de la Taverne : chaque joueur présent y est représenté par le
  * personnage qu'il a choisi, qui se promène au hasard, et qui affiche une bulle lorsque son
  * joueur écrit. Les joueurs présents et les messages viennent de l'écran de la Taverne ; le
- * personnage de chacun est demandé au serveur à chaque mise à jour de la liste des présents.
+ * personnage de chacun est demandé au serveur lorsque la liste des présents change, et toutes les trente secondes.
  */
 export function AvatarStage() {
   const { userId, players, messages, arrivals } = useTavernState()
@@ -117,19 +124,24 @@ export function AvatarStage() {
   const still = usePrefersReducedMotion()
   const shown = players.slice(0, LOOKUP_MAX)
 
+  const present = shown.map((player) => player.id).join(',')
+
   useEffect(() => {
-    if (players.length === 0) return
+    if (present === '') return
     let cancelled = false
-    const playerIds = players.slice(0, LOOKUP_MAX).map((player) => player.id)
-    client.lookup.$post({ json: { playerIds } }).then(async (res) => {
+    const ask = async () => {
+      const res = await client.lookup.$post({ json: { playerIds: present.split(',') } })
       if (!res.ok || cancelled) return
       const body = await res.json()
       if (!cancelled) setSkins((current) => ({ ...current, ...body.skins }))
-    })
+    }
+    ask()
+    const timer = setInterval(ask, SKINS_REFRESH_MS)
     return () => {
       cancelled = true
+      clearInterval(timer)
     }
-  }, [players])
+  }, [present])
 
   const spoken: Spoken[] = useMemo(
     () =>

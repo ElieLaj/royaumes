@@ -29,6 +29,15 @@ describe('Présence dans la Taverne', () => {
     expect((await beat(api, 'alice')).map((p) => p.name)).toEqual(['alice', 'bob'])
   })
 
+  it("présente un joueur arrivé à celui qui relit la liste, sans l'inscrire comme présent", async () => {
+    const api = await createTestApi()
+    await beat(api, 'bob')
+
+    expect(await present(api)).toEqual(['bob'])
+    const result = await api.db.execute(sql`SELECT player_id FROM tavern.presence`)
+    expect((result as unknown as { rows: unknown[] }).rows).toHaveLength(1)
+  })
+
   it('considère comme parti un joueur sans signal depuis deux minutes, et supprime sa ligne', async () => {
     const api = await createTestApi()
     await beat(api, 'alice')

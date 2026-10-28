@@ -8,6 +8,9 @@ import { LOOKUP_MAX, SKINS, type Skin } from './domain/skin'
 export type { Skin } from './domain/skin'
 export { defaultSkin, LOOKUP_MAX, SKINS } from './domain/skin'
 
+/** Intervalle entre deux demandes des personnages des joueurs présents, en millisecondes. */
+export const SKINS_REFRESH_MS = 30_000
+
 /** Corps attendu pour choisir son personnage : un nom du catalogue, et rien d'autre. */
 export const ChooseSkinInput = z.object({ skin: z.enum(SKINS) })
 

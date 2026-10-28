@@ -15,8 +15,9 @@ const STATUS: Record<MessageError['code'], 422 | 429> = {
  * Sous-application Hono du module Taverne, montée sur /api/tavern.
  * L'auteur d'un message est toujours le joueur connecté. Un message refusé par la limitation
  * reçoit le code 429, avec l'en-tête Retry-After : le délai à attendre, en secondes.
- * Le signal de présence renvoie les joueurs présents, ce qui dispense l'interface d'une seconde
- * requête ; la liste n'est pas diffusée en temps réel, pour ne pas ajouter de canal.
+ * Le signal de présence renvoie les joueurs présents. La liste n'est pas diffusée en temps réel,
+ * pour ne pas ajouter de canal : l'interface la relit, sans signaler sa présence, toutes les cinq
+ * secondes.
  */
 export function createTavernApi(service: TavernService) {
   return new Hono<AppEnv>()

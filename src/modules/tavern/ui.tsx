@@ -8,6 +8,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react'
 import { useChannel } from '@/platform/realtime/use-channel'
@@ -18,6 +19,8 @@ import {
   MESSAGE_MAX_LENGTH,
   type MessageError,
   type PresentPlayer,
+  REFRESH_MS,
+  samePlayers,
   TAVERN_CHANNEL,
   type TavernMessage,
 } from './contracts'
@@ -95,8 +98,9 @@ export const useTavernState = () => useContext(TavernContext)
  * Écran de la Taverne : salon de discussion et joueurs présents. Les messages arrivent par
  * l'historique, relu à chaque ouverture du canal, et par le canal temps réel, qui ne diffuse
  * que les messages à venir. La présence repose sur un signal régulier, un départ étant
- * signalé lorsque le joueur quitte la page. Les composants passés en enfants, placés sous le
- * salon, lisent son état par useTavernState.
+ * signalé lorsque le joueur quitte la page ; la liste des présents est relue toutes les cinq
+ * secondes, et aussitôt lorsqu'un message arrive d'un joueur qu'elle ne contient pas. Les
+ * composants passés en enfants, placés sous le salon, lisent son état par useTavernState.
  */
 export function TavernScreen({ userId, children }: { userId: string; children?: ReactNode }) {
   const [messages, setMessages] = useState<TavernMessage[]>([])
@@ -116,10 +120,22 @@ export function TavernScreen({ userId, children }: { userId: string; children?: 
     setMessages((current) => merge(current, latest))
   }, [])
 
+  const updatePlayers = useCallback((next: PresentPlayer[]) => {
+    setPlayers((current) => (samePlayers(current, next) ? current : next))
+  }, [])
+
+  const refreshPresence = useCallback(async () => {
+    const res = await client.presence.$get()
+    if (res.ok) updatePlayers((await res.json()).players)
+  }, [updatePlayers])
+
+  const known = useRef<PresentPlayer[]>([])
+
   const status = useChannel(TAVERN_CHANNEL, (event) => {
     const message = event.data as unknown as TavernMessage
     setMessages((current) => merge(current, [message]))
     arrived(message.id)
+    if (!known.current.some((player) => player.id === message.authorId)) refreshPresence()
   })
 
   useEffect(() => {
@@ -130,7 +146,7 @@ export function TavernScreen({ userId, children }: { userId: string; children?: 
     const beat = async () => {
       await leaving
       const res = await client.presence.$post()
-      if (res.ok) setPlayers((await res.json()).players)
+      if (res.ok) updatePlayers((await res.json()).players)
     }
     beat()
     const timer = setInterval(beat, HEARTBEAT_MS)
@@ -140,7 +156,23 @@ export function TavernScreen({ userId, children }: { userId: string; children?: 
       window.removeEventListener('pagehide', leave)
       leave()
     }
-  }, [])
+  }, [updatePlayers])
+
+  useEffect(() => {
+    known.current = players
+  }, [players])
+
+  useEffect(() => {
+    const reread = () => {
+      if (!document.hidden) refreshPresence()
+    }
+    const timer = setInterval(reread, REFRESH_MS)
+    document.addEventListener('visibilitychange', reread)
+    return () => {
+      clearInterval(timer)
+      document.removeEventListener('visibilitychange', reread)
+    }
+  }, [refreshPresence])
 
   async function send(event: FormEvent) {
     event.preventDefault()
