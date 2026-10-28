@@ -39,6 +39,7 @@ export interface SkinLook {
 /**
  * Apparence de chaque personnage. Les tailles compensent l'échelle propre à chaque image : un
  * pixel du sprite occupe quatre pixels de l'écran, au repos comme en marche.
+ * DETTE TECHNIQUE DT-018 (docs/qualite/dette-technique.md) : ces tailles sont mesurées à la main.
  */
 export const SKIN_LOOKS: Record<Skin, SkinLook> = {
   dwarf: {

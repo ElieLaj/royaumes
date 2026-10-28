@@ -17,3 +17,4 @@ un nouvel ADR est rédigé et l'ancien prend le statut « remplacé ».
 | [0009](0009-extraction-village.md) | Extraction du Village en service autonome, préparée mais non déployée | Proposé |
 | [0010](0010-notifications-stockage.md) | Tables classiques tenues par une projection du journal pour les Notifications | Proposé |
 | [0011](0011-notifications-communication.md) | Lecture du langage publié du Marché et du Donjon, et canal global discret pour les Notifications | Proposé |
+| [0012](0012-personnages-taverne.md) | Module Avatars : choix du personnage conservé en base, déplacements locaux, composition par l'écran de la Taverne | Proposé |
