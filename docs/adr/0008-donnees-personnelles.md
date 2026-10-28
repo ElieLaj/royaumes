@@ -83,8 +83,10 @@ anonymisées.
   contenant cet identifiant à une adresse IP, échappent au contrôle du projet.
 - Les messages d'un autre joueur qui citent le nom d'un joueur effacé ne sont pas réécrits : c'est un
   texte libre, qui disparaît au bout de trente jours.
-- La liste des présents n'est pas diffusée en temps réel : une arrivée ou un départ apparaît chez les
-  autres joueurs au plus tard trente secondes plus tard.
+- La liste des présents n'est pas diffusée en temps réel : chaque navigateur la relit. À l'origine, il ne
+  la recevait qu'avec son propre signal de présence, et une arrivée ou un départ n'apparaissait chez les
+  autres joueurs qu'au plus tard trente secondes plus tard ; depuis les personnages de la Taverne
+  (ADR 0012), il la relit toutes les cinq secondes.
 
 ## Alternatives écartées
 

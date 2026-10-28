@@ -232,7 +232,8 @@ d'une projection a lieu pendant une consultation : sa durée croît avec la tail
 
 Les personnages de la Taverne se promènent au hasard dans chaque navigateur, sans être synchronisés : deux joueurs ne
 voient pas un personnage au même endroit. Un changement de personnage apparaît chez les autres joueurs au plus
-trente secondes plus tard, à leur prochain signal de présence. La scène présente au plus cinquante personnages, et
+trente secondes plus tard, à leur prochaine demande des personnages ; un joueur qui arrive ou qui part apparaît
+au plus cinq secondes plus tard, la liste des présents étant relue à cet intervalle. La scène présente au plus cinquante personnages, et
 suspend les marches si le système demande de réduire les animations. Les tailles des images sont écrites à la main
 (DT-018), et l'origine des images n'est pas documentée (revue de sécurité des Avatars, A11).
 

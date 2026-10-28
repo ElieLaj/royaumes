@@ -15,7 +15,7 @@ position d'un personnage, en revanche, n'a aucune valeur de jeu : il n'est pas n
 navigateurs voient le même personnage au même endroit. Une bulle n'a de sens que le temps de la
 lire.
 
-La Taverne tient déjà les données utiles. L'écran connaît la liste des joueurs présents, relue à chaque
+La Taverne tient déjà les données utiles. L'écran connaît la liste des joueurs présents, que lui renvoie chaque
 signal de présence, toutes les trente secondes ; il reçoit les messages en direct par le canal `tavern`
 (ADR 0003) et par l'historique. La présence n'est conservée que deux minutes, et les messages trente
 jours (ADR 0008) : aucune de ces durées ne convient à un choix d'apparence. Les modules ne s'atteignent
@@ -50,8 +50,14 @@ Le module ne lit pas la Taverne lui-même. L'écran de la Taverne expose son ét
 messages, instant d'arrivée des messages en direct) par un contexte, et accepte des composants enfants
 sous le salon ; la page de la Taverne y place la scène des Avatars. La Taverne ne connaît pas les Avatars,
 et les Avatars n'ouvrent ni canal temps réel, ni signal de présence, ni tâche quotidienne : le personnage
-des présents est demandé au serveur à chaque mise à jour de leur liste, soit une requête toutes les trente
-secondes par visiteur.
+des présents est demandé au serveur lorsque leur liste change, et toutes les trente secondes pour suivre
+les changements de choix.
+
+La scène rend visible un défaut jusque-là discret de la Taverne : un joueur qui arrivait n'apparaissait chez les
+autres qu'à leur prochain signal de présence, jusqu'à trente secondes plus tard, alors que sa liste de noms
+pouvait passer inaperçue. L'écran de la Taverne relit donc la liste des présents (`GET /api/tavern/presence`, qui
+ne signale la présence de personne) toutes les cinq secondes tant que l'onglet est visible, et aussitôt qu'un
+message arrive d'un joueur absent de la liste. La liste n'est remplacée que si elle a changé.
 
 Les images (PNG au repos, GIF de marche) et la police 8-bit Operator Plus, sous licence SIL Open Font,
 sont des fichiers statiques de `public/`. Une fonction d'aptitude vérifie que chaque personnage du
@@ -63,8 +69,8 @@ catalogue a ses deux images.
 
 - Le choix d'un joueur est conservé, vu des autres, et supprimé avec son compte, sans réécriture du
   journal.
-- Le coût réseau est négligeable : une requête toutes les trente secondes par visiteur de la Taverne, et
-  aucune pour les positions, qui ne sont partagées avec personne.
+- Le coût réseau du module est négligeable : une demande des personnages toutes les trente secondes et à chaque
+  arrivée ou départ, et aucune pour les positions, qui ne sont partagées avec personne.
 - Les règles de déplacement et de bulle sont testées sans navigateur, avec un hasard reproductible, et
   la bulle ne dépend pas du décalage entre l'horloge du navigateur et celle du serveur.
 - Aucun module existant n'a de dépendance nouvelle : la Taverne n'importe rien des Avatars, qui ne
@@ -74,8 +80,11 @@ catalogue a ses deux images.
 
 ### Négatives
 
-- Un changement de personnage n'apparaît chez les autres joueurs qu'à leur prochain signal de présence,
+- Un changement de personnage n'apparaît chez les autres joueurs qu'à leur prochaine demande des personnages,
   au plus trente secondes plus tard ; seul le joueur le voit aussitôt.
+- La relecture de la liste des présents toutes les cinq secondes multiplie par six les requêtes de présence de
+  chaque visiteur, douze par minute au lieu de deux, à raison de deux requêtes SQL chacune : la charge de la
+  Taverne croît avec le nombre de visiteurs (risque 1 du bilan), et le test de charge ne la mesure pas.
 - La communication avec la Taverne passe par l'interface de celle-ci, et non par des messages de la boîte
   d'envoi ni par la lecture d'un journal : la Taverne n'enregistre aucun événement. Les Avatars dépendent du
   contexte `useTavernState` de la Taverne, entrée publique de son interface, et d'elle seule.

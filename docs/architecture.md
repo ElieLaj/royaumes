@@ -142,7 +142,7 @@ avec elle par son interface, seule entrée publique qui porte ses données : l'�
 présents, les messages et l'instant d'arrivée des messages en direct par un contexte (`useTavernState`), et accepte des
 composants enfants ; la page de la Taverne y place la scène des Avatars. La Taverne n'importe rien des Avatars. Les
 Avatars n'ouvrent ni canal temps réel ni tâche quotidienne : ils demandent au serveur le personnage des joueurs présents
-à chaque mise à jour de leur liste, et tout le reste, positions, marches et bulles, se passe dans le navigateur
+lorsque leur liste change et toutes les trente secondes, et tout le reste, positions, marches et bulles, se passe dans le navigateur
 (ADR 0012).
 
 Le module `market` modifie les villages sans jamais importer le code du Village : il enregistre
@@ -228,7 +228,7 @@ sequenceDiagram
   actor Bob as Bob, navigateur
   participant A as Avatars
 
-  Bob->>T: POST /api/tavern/presence, toutes les trente secondes
+  Bob->>T: POST /api/tavern/presence toutes les trente secondes, GET toutes les cinq secondes
   T-->>Bob: joueurs présents, dont Alice
   Bob->>A: POST /api/avatars/lookup, avec les identifiants des présents
   A-->>Bob: le personnage de chacun, choisi ou attribué
