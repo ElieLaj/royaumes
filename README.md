@@ -59,6 +59,7 @@ src/
   bootstrap/          Racine de composition de l'application
   services/           Racines de composition des services extraits
   ui/                 Thème et composants d'interface partagés
+public/               Fichiers statiques : images des personnages et police 8-bit
 scripts/              Scripts d'exploitation, de mesure et de démarrage du service extrait
 drizzle/              Migrations de la base de données
 perf/                 Budget de performance et résultats des tests de charge
@@ -83,6 +84,7 @@ Un module n'est accessible depuis l'extérieur que par ses entrées publiques : 
 | `market` | Marché : échanges de ressources entre joueurs, par une saga orchestrée | `/api/market` |
 | `tavern` | Taverne : salon de discussion commun et présence des joueurs, sans Event Sourcing | `/api/tavern` |
 | `notifications` | Notifications : fil des offres conclues ou expirées et des expéditions terminées, construit à partir des événements du Marché et du Donjon | `/api/notifications` |
+| `avatars` | Personnages : chaque joueur présent dans la Taverne y est représenté par le personnage qu'il a choisi, qui se promène, porte son pseudo et affiche ses messages en bulle | `/api/avatars` |
 
 ## Temps réel
 
@@ -146,7 +148,8 @@ page « Mes données » :
   d'événements (ADR 0008). Chaque effacement est consigné dans `platform.erasures`.
 
 Les messages de la Taverne sont conservés trente jours, et la présence d'un joueur deux
-minutes après son dernier signal. Les notifications sont conservées trente jours, sans nom d'un
+minutes après son dernier signal. Le personnage choisi par un joueur est conservé jusqu'à la
+suppression de son compte (ADR 0012). Les notifications sont conservées trente jours, sans nom d'un
 autre joueur ; la position de lecture de chaque joueur l'est jusqu'à la suppression de son
 compte, qui efface aussi ses notifications (ADR 0010). Ces durées sont appliquées à chaque
 lecture, et chaque jour par la tâche planifiée `/api/cron/daily`, qui supprime aussi les
@@ -199,6 +202,7 @@ sans la première ; sans la seconde, la route des tâches quotidiennes reste fer
 - [Revue de sécurité du Donjon](docs/qualite/revue-securite-donjon.md)
 - [Revue de sécurité du Marché](docs/qualite/revue-securite-marche.md)
 - [Revue de sécurité des Notifications](docs/qualite/revue-securite-notifications.md)
+- [Revue de sécurité des Avatars](docs/qualite/revue-securite-avatars.md)
 - [Registre des traitements](docs/rgpd/registre-traitements.md)
 - [Revue de conformité au RGPD](docs/rgpd/revue-conformite.md)
 - [Bilan technique](docs/bilan-technique.md)
@@ -224,6 +228,12 @@ Le classement et la liste des expéditions ouvertes peuvent présenter, pendant 
 secondes, un état qui ne tient pas encore compte des derniers événements. La reconstruction
 d'une projection a lieu pendant une consultation : sa durée croît avec la taille du journal
 (ADR 0006).
+
+Les personnages de la Taverne se promènent au hasard dans chaque navigateur, sans être synchronisés : deux joueurs ne
+voient pas un personnage au même endroit. Un changement de personnage apparaît chez les autres joueurs au plus
+trente secondes plus tard, à leur prochain signal de présence. La scène présente au plus cinquante personnages, et
+suspend les marches si le système demande de réduire les animations. Les tailles des images sont écrites à la main
+(DT-018), et l'origine des images n'est pas documentée (revue de sécurité des Avatars, A11).
 
 Une offre échue n'est plus proposée ni acceptée, mais ses ressources ne sont restituées au
 vendeur qu'à la consultation suivante du Marché, ou au plus tard lors de la tâche planifiée

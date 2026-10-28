@@ -12,7 +12,7 @@ dans le même commit que la modification qu'ils décrivent.
 ```mermaid
 flowchart TB
   joueur["Joueur<br/>[Personne]<br/>Joue depuis un navigateur,<br/>sur ordinateur ou sur téléphone"]
-  royaumes["Royaumes<br/>[Système logiciel]<br/>Jeu web multijoueur : village, donjon,<br/>classement, marché, taverne et notifications"]
+  royaumes["Royaumes<br/>[Système logiciel]<br/>Jeu web multijoueur : village, donjon,<br/>classement, marché, taverne,<br/>notifications et personnages"]
   joueur -->|"Gère son village, joue avec les autres joueurs,<br/>reçoit les changements en direct (HTTPS)"| royaumes
 ```
 
@@ -28,7 +28,7 @@ flowchart TB
   subgraph royaumes["Système Royaumes"]
     web["Interface web<br/>[Conteneur : React, dans le navigateur]<br/>Pages du jeu et page de connexion"]
     serveur["Application serveur<br/>[Conteneur : Next.js et Hono, fonctions Vercel, Francfort]<br/>Rendu des pages, API JSON,<br/>authentification, flux temps réel"]
-    base[("Base de données<br/>[Conteneur : PostgreSQL, Neon, Francfort]<br/>Schéma platform : journal, points de reprise,<br/>boîte d'envoi, registre des effacements<br/>Schéma identity : comptes et sessions<br/>Schémas ranking, dungeon et market :<br/>modèles de lecture<br/>Schéma tavern : messages et présence<br/>Schéma notifications : fil des joueurs,<br/>positions de lecture")]
+    base[("Base de données<br/>[Conteneur : PostgreSQL, Neon, Francfort]<br/>Schéma platform : journal, points de reprise,<br/>boîte d'envoi, registre des effacements<br/>Schéma identity : comptes et sessions<br/>Schémas ranking, dungeon et market :<br/>modèles de lecture<br/>Schéma tavern : messages et présence<br/>Schéma notifications : fil des joueurs,<br/>positions de lecture<br/>Schéma avatars : personnage choisi par chaque joueur")]
   end
   joueur -->|"Utilise"| web
   web -->|"Pages, appels de l'API avec le cookie de session<br/>(HTTPS, JSON)"| serveur
@@ -53,6 +53,10 @@ est tiré de ceux du Marché et du Donjon par une projection (ADR 0010). Une exc
 positions de lecture, propre à chaque joueur, n'est pas dérivée du journal, et la reconstruction de la
 projection n'y touche pas.
 
+Le schéma `avatars` ne contient qu'une table, le personnage choisi par chaque joueur : le module n'enregistre
+aucun événement, et sa table est sa seule source de vérité (ADR 0012). Les images des personnages et la police
+sont des fichiers statiques du répertoire `public/`, servis avec l'application.
+
 L'interface web ne communique jamais directement avec la base : toute lecture et toute
 écriture passent par l'application serveur, qui applique le contrôle d'accès.
 
@@ -74,6 +78,7 @@ flowchart TB
     market["market<br/>Marché : orchestrateur de la saga,<br/>projection des offres, API, canal global"]
     tavern["tavern<br/>Taverne : messages et présence<br/>en tables, API, canal à source propre"]
     notifications["notifications<br/>Notifications : domaine, service,<br/>projection du Marché et du Donjon,<br/>tables, API, canal global discret"]
+    avatars["avatars<br/>Avatars : domaine (personnages, bulles,<br/>déplacements), service, table, API,<br/>scène placée dans la Taverne"]
   end
   subgraph platform["src/platform"]
     auth["auth<br/>Port AuthPort,<br/>adaptateur Better Auth"]
@@ -90,15 +95,17 @@ flowchart TB
   route --> server
   pages --> server
   server --> createapi
-  createapi --> system & realm & dungeon & ranking & market & tavern & notifications & auth & http & realtime & projection & outbox & privacy & cron
+  createapi --> system & realm & dungeon & ranking & market & tavern & notifications & avatars & auth & http & realtime & projection & outbox & privacy & cron
   realm --> store & projection & realtime & http & outbox
   market --> store & projection & realtime & http & outbox
   dungeon --> store & projection & realtime & http
   ranking --> projection & realtime & http
   tavern --> realtime & http & db
   notifications --> projection & realtime & http & db
+  avatars --> http & db
+  avatars -->|"scène placée dans son écran<br/>(contexte useTavernState)"| tavern
   notifications -->|"lit le langage publié<br/>(contrats seulement)"| market & dungeon
-  realm & dungeon & market & ranking & tavern & notifications --> privacy
+  realm & dungeon & market & ranking & tavern & notifications & avatars --> privacy
   privacy --> store
   auth --> privacy
   realtime --> store & http
@@ -130,6 +137,14 @@ sont lus, et le module ne leur demande rien (ADR 0011). Une notification appara�
 de la projection, au plus tard à la prochaine consultation du fil. Son canal temps réel est global et
 discret : il annonce qu'un événement notifiable a eu lieu, et chaque navigateur relit son propre fil.
 
+Le module `avatars` ne lit ni le journal ni la boîte d'envoi : la Taverne n'enregistre aucun événement. Il communique
+avec elle par son interface, seule entrée publique qui porte ses données : l'écran de la Taverne expose les joueurs
+présents, les messages et l'instant d'arrivée des messages en direct par un contexte (`useTavernState`), et accepte des
+composants enfants ; la page de la Taverne y place la scène des Avatars. La Taverne n'importe rien des Avatars. Les
+Avatars n'ouvrent ni canal temps réel ni tâche quotidienne : ils demandent au serveur le personnage des joueurs présents
+à chaque mise à jour de leur liste, et tout le reste, positions, marches et bulles, se passe dans le navigateur
+(ADR 0012).
+
 Le module `market` modifie les villages sans jamais importer le code du Village : il enregistre
 des messages dans la boîte d'envoi, que le distributeur remet aux gestionnaires du Village.
 La seule dépendance directe porte sur les contrats du Village (`REALM_TOPICS`, `ResourceAmounts`),
@@ -153,11 +168,11 @@ dependency-cruiser (`.dependency-cruiser.cjs`) à chaque exécution de `pnpm ver
 - aucune dépendance circulaire n'est admise ;
 - un module n'importe jamais les tables de la plateforme : il passe par ses fonctions.
 
-Trois fonctions d'aptitude complètent ces règles, sous la forme de tests
+Quatre fonctions d'aptitude complètent ces règles, sous la forme de tests
 (`src/bootstrap/architecture.test.ts`) : chaque table est rangée dans le schéma d'une brique
 de la plateforme ou d'un module, chaque module qui conserve des données déclare ses
-données personnelles, et chaque type d'événement que lisent les Notifications est encore publié
-par le domaine du Marché ou du Donjon.
+données personnelles, chaque type d'événement que lisent les Notifications est encore publié
+par le domaine du Marché ou du Donjon, et chaque personnage du catalogue des Avatars a ses deux images.
 
 Seule la racine de composition connaît à la fois la plateforme et l'ensemble des modules.
 
@@ -198,6 +213,34 @@ sequenceDiagram
 Bob n'est pas notifié : il a reçu la réponse de sa propre action. Si la saga est interrompue après
 `TradeCompleted`, les versements sont repris par la boîte d'envoi, et la notification n'est pas affectée.
 Si le paiement est refusé, aucun `TradeCompleted` n'est enregistré, et personne n'est notifié.
+
+## Parcours : un message de la Taverne apparaît en bulle
+
+Ce parcours traverse la Taverne et les Avatars, dans deux navigateurs. Alice écrit dans le salon ; Bob, présent
+dans la Taverne, voit la bulle d'Alice au-dessus de son personnage, dont il a obtenu l'apparence auprès des
+Avatars. Rien de cela ne passe par le journal : la Taverne conserve ses messages dans une table.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Alice as Alice, navigateur
+  participant T as Taverne
+  actor Bob as Bob, navigateur
+  participant A as Avatars
+
+  Bob->>T: POST /api/tavern/presence, toutes les trente secondes
+  T-->>Bob: joueurs présents, dont Alice
+  Bob->>A: POST /api/avatars/lookup, avec les identifiants des présents
+  A-->>Bob: le personnage de chacun, choisi ou attribué
+  Note over Bob: la scène place un personnage par joueur, qui se promène au hasard
+  Alice->>T: POST /api/tavern/messages
+  T-->>Alice: message enregistré
+  T-->>Bob: canal tavern, MessagePosted
+  Note over Bob: l'écran note l'instant d'arrivée, la scène affiche la bulle six secondes
+```
+
+Le choix d'un personnage suit un parcours plus court : `PUT /api/avatars/me` enregistre le choix d'Alice, que sa scène
+affiche aussitôt ; Bob le voit à sa prochaine demande, au plus trente secondes plus tard.
 
 ## Extraction du Village
 
