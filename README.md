@@ -207,6 +207,7 @@ sans la première ; sans la seconde, la route des tâches quotidiennes reste fer
 - [Revue de conformité au RGPD](docs/rgpd/revue-conformite.md)
 - [Bilan technique](docs/bilan-technique.md)
 - [Évaluation : fiche de cadrage](docs/evaluation/fiche-cadrage.md) et [document de rendu](docs/evaluation/rendu.md)
+- [Fiche de cadrage des Avatars](docs/evaluation/fiche-cadrage-avatars.md)
 
 ## Conventions
 

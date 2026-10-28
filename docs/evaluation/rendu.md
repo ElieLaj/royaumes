@@ -96,6 +96,69 @@ Les mesures sont celles de `pnpm verify` et de `pnpm test:coverage` ; la baisse 
 l'écran des Notifications (39 lignes sans test), le reste du module étant couvert à 96 %. Le détail figure
 dans [le bilan technique](../bilan-technique.md).
 
+## Fonctionnalité complémentaire : le module Avatars
+
+Cette fonctionnalité est postérieure à l'étiquette `eval-fin` : seul l'état du dépôt à cette étiquette est celui du
+rendu, et le module évalué reste Notifications. Le module Avatars a été réalisé avec les mêmes exigences, pour
+qu'il puisse être examiné de la même façon. Sa fiche est [fiche-cadrage-avatars.md](fiche-cadrage-avatars.md) ; elle a
+été rédigée après la réalisation, et n'a pas été validée par l'enseignant. Les chemins sont relatifs à
+`src/modules/avatars/`, sauf mention contraire.
+
+| N° | Fichiers principaux | Tests qui la vérifient |
+| --- | --- | --- |
+| E1 | `domain/` (`skin.ts`, `bubble.ts`, `wander.ts`), `application/` (`avatars-service.ts`, `skin-store.ts`), `infrastructure/` (`schema.ts`, `drizzle-skin-store.ts`), `api.ts`, `index.ts`, `contracts.ts`, `ui.tsx`, `personal-data.ts` | `pnpm lint:archi` : aucune violation (170 modules, 550 dépendances) ; fonction d'aptitude « déclare les données personnelles de chaque module qui conserve des données » |
+| E2 | `src/bootstrap/create-api.ts`, `app/(jeu)/tavern/page.tsx` (la scène est placée dans la page de la Taverne, accessible depuis la navigation) | Tous les tests de `src/bootstrap/avatars-api.test.ts` passent par la racine de composition ; la page n'a pas de test automatique (observée dans un navigateur) |
+| E3 | `domain/skin.ts`, `domain/bubble.ts`, `domain/wander.ts` : fonctions pures, le hasard étant fourni par l'appelant | `domain/skin.test.ts`, `domain/bubble.test.ts` et `domain/wander.test.ts` (14 tests) ; règle `pure-domain` |
+| E4 | `infrastructure/schema.ts` (schéma `avatars`, table `skins`), `drizzle/0015_avatars.sql`, ADR 0012 | Fonction d'aptitude « range chaque table dans le schéma d'une brique de la plateforme ou d'un module » ; « enregistre le personnage choisi, et le remplace à chaque nouveau choix » |
+| E5 | `api.ts`, `contracts.ts` (`ChooseSkinInput`, `LookupInput`), `src/bootstrap/create-api.ts` (`requireUser`) | « refuse une requête anonyme (401) » ; « ne choisit qu'au nom du joueur connecté, quel que soit le corps envoyé » ; « refuse un personnage hors du catalogue, ou un corps invalide (400) » ; « refuse une demande vide, ou de plus de cinquante joueurs (400) » ; revue de sécurité A1 à A4 |
+| E6 | `ui.tsx` (lit l'état de la Taverne par `useTavernState`), `src/modules/tavern/ui.tsx` (contexte et enfants) | Écart : voir ci-dessous. Aucun test automatique de l'interface ; les règles que la scène applique sont testées dans le domaine |
+| E7 | `personal-data.ts`, enregistré dans `src/bootstrap/create-api.ts` | « exporte le personnage choisi par le joueur, puis l'efface avec son compte » ; fonction d'aptitude « déclare les données personnelles… » ; registre des traitements, T9 |
+| E8 | Voir la correspondance ci-dessous | 14 tests du domaine, 8 de l'API, 1 fonction d'aptitude |
+| E9 | Aucun fichier de configuration modifié : `.dependency-cruiser.cjs` est identique à celui de `td11-fin` | `pnpm lint:archi` ; les quatre fonctions d'aptitude de `src/bootstrap/architecture.test.ts` passent |
+| E10 | Migration `drizzle/0015_avatars.sql`, appliquée par `pnpm vercel-build` ; images et police dans `public/` | Non vérifié sur le déploiement au moment de la rédaction : le module a été exercé sur un serveur de développement avec PGlite. À vérifier après l'envoi |
+
+### Correspondance entre les règles de la fiche et les tests (E8)
+
+| Règle de la fiche | Test du domaine | Test de l'API |
+| --- | --- | --- |
+| 1. Trois personnages, aucun autre nom | « ne propose que les trois personnages du catalogue » | « refuse un personnage hors du catalogue, ou un corps invalide (400) » |
+| 2. Un personnage attribué par défaut, toujours le même | « attribue à chaque joueur un personnage par défaut, toujours le même, tiré de son identifiant » | « attribue un personnage à un joueur qui n'a rien choisi, toujours le même » |
+| 3. Le choix, ou le personnage attribué si le choix a disparu | « garde le personnage choisi, et retombe sur celui par défaut s'il a disparu du catalogue » | « présente le personnage des seuls joueurs demandés, choisi ou attribué » |
+| 4. Une bulle d'une ligne de soixante caractères | « résume le message sur une seule ligne » ; « raccourcit un message trop long, sans couper un symbole en deux » | |
+| 5. Une bulle visible six secondes, la dernière de chaque joueur | « affiche le dernier message du joueur, et seulement le sien » ; « efface la bulle au bout de six secondes » ; « ne ressuscite pas un message ancien lorsqu'un message plus récent a expiré » | |
+| 6. Un personnage reste dans la scène et rebrousse chemin | « ne sort jamais de la scène, quelle que soit la position de départ » ; « rebrousse chemin au bord de la scène, quel que soit le tirage » ; « laisse à la scène la place de rebrousser chemin après la marche la plus longue » | |
+| 7. Une marche à vitesse constante, une pause de 1,5 à 6 secondes | « marche à vitesse constante, en regardant du côté où elle va » ; « fait une pause comprise dans les bornes avant de repartir » ; « est reproductible pour une même suite de tirages » | |
+| 8. Un joueur ne choisit que son personnage, cinquante joueurs au plus par demande | | « ne choisit qu'au nom du joueur connecté, quel que soit le corps envoyé » ; « refuse une demande vide, ou de plus de cinquante joueurs (400) » |
+
+| Route | Test de l'API |
+| --- | --- |
+| `GET /api/avatars/me` | « refuse une requête anonyme (401) » ; « attribue un personnage à un joueur qui n'a rien choisi, toujours le même » |
+| `PUT /api/avatars/me` | « enregistre le personnage choisi, et le remplace à chaque nouveau choix » ; « refuse un personnage hors du catalogue, ou un corps invalide (400) » ; « ne choisit qu'au nom du joueur connecté, quel que soit le corps envoyé » |
+| `POST /api/avatars/lookup` | « présente le personnage des seuls joueurs demandés, choisi ou attribué » ; « refuse une demande vide, ou de plus de cinquante joueurs (400) » |
+
+Écarts du module Avatars :
+
+- **E6** : le module communique avec la Taverne par son interface (contexte et composants enfants), et non par des
+  messages de la boîte d'envoi ni par la lecture du langage publié d'un module : la Taverne n'enregistre aucun
+  événement et n'envoie aucun message. Le choix est justifié dans l'ADR 0012.
+- Aucun bonus n'est revendiqué pour ce module.
+- Les tailles d'affichage des images sont écrites à la main (DT-018), un corps JSON mal formé produit une erreur 500
+  (DT-017, défaut de la plateforme), et l'origine des images n'est pas documentée (revue de sécurité des Avatars, A11).
+- Aucun test existant n'a été modifié, retiré ni affaibli : `src/bootstrap/architecture.test.ts` a été complété, et
+  l'interface de la Taverne (`src/modules/tavern/ui.tsx`) expose désormais son état par un contexte.
+
+Indicateurs après l'ajout du module :
+
+| Indicateur | À l'étiquette `td11-fin` | À l'étiquette `eval-fin` | Après les Avatars |
+| --- | --- | --- | --- |
+| Nombre de tests | 236 | 265 | 288 |
+| Couverture des lignes | 75,3 % | 74,9 % | 72,4 % |
+| Violations des règles d'architecture | 0 | 0 | 0 |
+| Fonctions d'aptitude | 2 | 3 | 4 |
+
+La baisse de la couverture vient de la scène (74 lignes sans test) : le reste du module est couvert à 100 %
+(62 lignes sur 62).
+
 ## Usage de l'IA générative
 
 Outil utilisé : un assistant de programmation fondé sur l'IA générative, dont le nom figure dans la fiche
@@ -114,5 +177,7 @@ des lignes de correspondance omis) ; des parcours sur un serveur local, sur la c
 avec plusieurs joueurs (échange du Marché, notification reçue sans rechargement, marquage comme lu, export
 et suppression d'un compte, canal, requêtes anonymes et malformées, puis examen de la base) ;
 la validation des diagrammes Mermaid avec la bibliothèque officielle ; deux séries de mesures de charge.
-Le déploiement sur Vercel n'a pas été vérifié par l'assistant. Les statuts « proposé » des ADR et les
+Pour le module Avatars, l'assistant a aussi préparé les images (nettoyage et recadrage des GIF) et écrit la
+scène, et les résultats ont été observés dans un navigateur, avec plusieurs joueurs, sur écran large et sur écran de
+téléphone. Le déploiement sur Vercel n'a pas été vérifié par l'assistant. Les statuts « proposé » des ADR et les
 appréciations des revues doivent être relus et validés par l'auteur.
