@@ -6,7 +6,7 @@ supprime une donnée personnelle, dans le même commit que cette évolution.
 
 - Responsable du traitement : Elie Lajoinie (auteur du projet), contact par le dépôt GitHub
   [ElieLaj/royaumes](https://github.com/ElieLaj/royaumes).
-- Date de dernière mise à jour : 2026-10-23.
+- Date de dernière mise à jour : 2026-10-28.
 
 ## Sous-traitants
 
@@ -27,6 +27,7 @@ supprime une donnée personnelle, dans le même commit que cette évolution.
 | T6 | Registre des effacements | Démontrer la réalisation des effacements | Date de l'effacement, nombre d'événements réécrits ; aucune donnée sur le joueur | Aucune personne identifiable | Obligation légale (responsabilité, article 5) | Illimitée | `platform.erasures` |
 | T7 | Journaux techniques | Diagnostiquer les erreurs, assurer la sécurité | Adresse IP, adresses des requêtes, navigateur, erreurs journalisées (nom et première ligne du message, sans paramètres) | Joueurs, visiteurs | Intérêt légitime (sécurité, maintenance) | Une heure sur l'offre gratuite (Hobby) de Vercel ; un jour sur l'offre Pro, trente jours avec Observability Plus | Vercel |
 | T8 | Notifications | Informer le joueur de ce qui s'est passé pendant son absence : offre conclue ou expirée, expédition terminée | Identifiant du joueur, sorte de notification, identifiant de l'offre ou de l'expédition, résultat d'une expédition, date ; position de lecture du joueur ; vendeur de chaque offre en cours, joueurs de chaque expédition en cours | Joueurs | Exécution du contrat | Trente jours pour une notification ; au plus trente jours pour les lignes de correspondance (une offre dure vingt-quatre heures) ; position de lecture jusqu'à la suppression du compte | `notifications.notifications`, `notifications.read_marks`, `notifications.offer_parties`, `notifications.game_members` |
+| T9 | Personnage de la Taverne | Représenter le joueur, dans la Taverne, par le personnage qu'il a choisi, visible des autres joueurs | Identifiant du joueur, personnage choisi (un nom du catalogue), date du choix | Joueurs | Exécution du contrat | Jusqu'à la suppression du compte | `avatars.skins` |
 
 ### Mesures de sécurité du traitement T8
 
@@ -37,6 +38,18 @@ supprime une donnée personnelle, dans le même commit que cette évolution.
 - La durée de conservation est appliquée à la lecture et par la tâche quotidienne `notifications` (N9).
 - Le contributeur du module exporte ces données et les efface avec le compte, sans rien laisser dans les
   quatre tables (N10). Le module n'enregistre aucun événement : il n'y a rien à réécrire dans le journal.
+
+### Mesures de sécurité du traitement T9
+
+- Les routes sont réservées au joueur connecté, qui ne choisit que son propre personnage : aucune route
+  n'accepte l'identifiant du joueur qui écrit, et le nom du personnage est validé contre le catalogue (A1
+  à A3 de la revue de sécurité des Avatars).
+- Le personnage d'un joueur est public pour les joueurs connectés, par nature ; les demandes sont bornées
+  à cinquante joueurs, ne renvoient que les joueurs demandés et ne distinguent pas un choix d'un
+  personnage attribué par défaut (A4, A5).
+- Aucune position ni activité n'est conservée ni transmise : elles n'existent que dans le navigateur (A9).
+- Le contributeur du module exporte le choix du joueur et le supprime avec le compte, sans ligne
+  orpheline (A8). Le module n'enregistre aucun événement : il n'y a rien à réécrire dans le journal.
 
 ## Droits des personnes
 
