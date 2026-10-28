@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { createAvatarsModule } from '@/modules/avatars'
 import { createDungeonModule } from '@/modules/dungeon'
 import { createMarketModule } from '@/modules/market'
 import { createNotificationsModule } from '@/modules/notifications'
@@ -85,6 +86,7 @@ export function createApi({
   })
   const tavern = createTavernModule({ db, clock })
   const notifications = createNotificationsModule({ db, projections, clock })
+  const avatars = createAvatarsModule({ db, clock })
 
   /**
    * Droits des joueurs : chaque module fournit ses données personnelles. L'identité vient en
@@ -99,6 +101,7 @@ export function createApi({
       ranking.personalData,
       tavern.personalData,
       notifications.personalData,
+      avatars.personalData,
       createIdentityPersonalData(db),
     ],
     clock,
@@ -173,6 +176,7 @@ export function createApi({
   app.use('/tavern/*', requireUser(auth))
   app.use('/notifications', requireUser(auth))
   app.use('/notifications/*', requireUser(auth))
+  app.use('/avatars/*', requireUser(auth))
   app.use('/account', requireUser(auth))
   app.use('/account/*', requireUser(auth))
   app.use('/stream/*', requireUser(auth))
@@ -187,6 +191,7 @@ export function createApi({
     .route('/market', market.api)
     .route('/tavern', tavern.api)
     .route('/notifications', notifications.api)
+    .route('/avatars', avatars.api)
     .route('/account', createPrivacyApi(privacy))
     .route('/stream', createRealtimeApi({ store, policies, ...realtime }))
 }
