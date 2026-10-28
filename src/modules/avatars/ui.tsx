@@ -34,6 +34,12 @@ function usePrefersReducedMotion() {
 /** Nombre de rangées de profondeur de la scène : les personnages ne se superposent pas tous. */
 const ROWS = 3
 
+/**
+ * Délai de grâce, en millisecondes, après la durée prévue d'une marche : si le navigateur ne
+ * signale pas la fin du déplacement, le personnage s'arrête de toute façon.
+ */
+const WALK_GRACE_MS = 500
+
 /** Rangée d'un joueur, stable d'une visite à l'autre : elle se déduit de son identifiant. */
 const rowOf = (playerId: string) =>
   [...playerId].reduce((sum, character) => sum + character.charCodeAt(0), 0) % ROWS
@@ -50,6 +56,9 @@ interface CharacterProps {
 /**
  * Personnage d'un joueur : il alterne les pauses, où il est au repos, et les marches, où il
  * est animé. Sa position n'existe que dans ce navigateur : elle n'est partagée avec personne.
+ * Les deux images sont affichées en permanence, l'une masquée : le personnage ne se déplace
+ * qu'une fois son image de marche chargée, et reprend son image de repos à la fin réelle du
+ * déplacement, signalée par le navigateur, et non à une minuterie qui l'anticiperait.
  */
 function Character({ id, name, skin, bubble, mine, still }: CharacterProps) {
   const [position, setPosition] = useState(() => startPosition(Math.random))
@@ -58,29 +67,46 @@ function Character({ id, name, skin, bubble, mine, still }: CharacterProps) {
     facing: 'right',
     walkMs: 0,
   })
+  const [loaded, setLoaded] = useState<Skin | null>(null)
   const here = useRef(position)
+  const finish = useRef<(() => void) | null>(null)
+  const walkImage = useRef<HTMLImageElement>(null)
+  const resting = still || loaded !== skin
 
   useEffect(() => {
-    if (still) return
+    const image = walkImage.current
+    if (image?.complete && image.naturalWidth > 0) setLoaded(skin)
+  }, [skin])
+
+  useEffect(() => {
+    if (resting) {
+      setMove((current) => (current.walking ? { ...current, walking: false } : current))
+      return
+    }
     let timer: ReturnType<typeof setTimeout>
     const rest = () => {
+      finish.current = null
       const plan = planMove(here.current, Math.random)
       timer = setTimeout(() => {
         here.current = plan.to
         setPosition(plan.to)
         setMove({ walking: true, facing: plan.facing, walkMs: plan.walkMs })
-        timer = setTimeout(() => {
+        finish.current = () => {
+          clearTimeout(timer)
           setMove((current) => ({ ...current, walking: false }))
           rest()
-        }, plan.walkMs)
+        }
+        timer = setTimeout(() => finish.current?.(), plan.walkMs + WALK_GRACE_MS)
       }, plan.pauseMs)
     }
     rest()
-    return () => clearTimeout(timer)
-  }, [still])
+    return () => {
+      clearTimeout(timer)
+      finish.current = null
+    }
+  }, [resting])
 
   const look = SKIN_LOOKS[skin]
-  const sprite = move.walking ? look.walk : look.idle
 
   return (
     <div
@@ -94,18 +120,38 @@ function Character({ id, name, skin, bubble, mine, still }: CharacterProps) {
           '--row': rowOf(id),
         } as CSSProperties
       }
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget && event.propertyName === 'left')
+          finish.current?.()
+      }}
     >
       {bubble !== null && <div className="avatar-bubble">{bubble}</div>}
       <span className="avatar-name">{name}</span>
-      <Image
-        className="avatar-sprite"
-        src={sprite.src}
-        width={sprite.width}
-        height={sprite.height}
-        alt=""
-        unoptimized
+      <div
+        className="avatar-sprites"
         style={{ transform: move.facing === 'left' ? 'scaleX(-1)' : undefined }}
-      />
+      >
+        <Image
+          className={move.walking ? 'avatar-sprite avatar-sprite-off' : 'avatar-sprite'}
+          src={look.idle.src}
+          width={look.idle.width}
+          height={look.idle.height}
+          alt=""
+          unoptimized
+          loading="eager"
+        />
+        <Image
+          ref={walkImage}
+          className={move.walking ? 'avatar-sprite' : 'avatar-sprite avatar-sprite-off'}
+          src={look.walk.src}
+          width={look.walk.width}
+          height={look.walk.height}
+          alt=""
+          unoptimized
+          loading="eager"
+          onLoad={() => setLoaded(skin)}
+        />
+      </div>
     </div>
   )
 }

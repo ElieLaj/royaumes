@@ -123,7 +123,9 @@ input.amount { width: 5em; }
 .avatar[data-speaking] { z-index: 5; }
 .avatar-name { max-width: 110px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: '8-bit Operator', monospace; font-size: 14px; font-weight: 700; color: #f2e8da; text-shadow: 1px 0 #000, -1px 0 #000, 0 1px #000, 0 -1px #000; }
 .avatar[data-mine] .avatar-name { color: #ffd27a; }
-.avatar-sprite { display: block; image-rendering: pixelated; }
+.avatar-sprites { display: grid; place-items: end center; }
+.avatar-sprite { grid-area: 1 / 1; display: block; image-rendering: pixelated; }
+.avatar-sprite-off { visibility: hidden; }
 .avatar-bubble { position: absolute; bottom: calc(100% + 6px); left: 50%; width: max-content; max-width: min(190px, 36cqw); padding: 4px 8px; transform: translateX(-50%); border: 2px solid #2b2118; border-radius: 6px; background: #fffaf0; color: #2b2118; font-family: '8-bit Operator', monospace; font-size: 14px; line-height: 1.15; text-align: center; overflow-wrap: anywhere; }
 .avatar-bubble::after { content: ''; position: absolute; top: 100%; left: 50%; margin-left: -5px; border: 5px solid transparent; border-top-color: #2b2118; }
 .avatar-picker { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; min-width: 0; margin: 0; padding: 10px 16px; border: 0; }
