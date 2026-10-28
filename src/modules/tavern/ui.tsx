@@ -1,6 +1,15 @@
 'use client'
 import { hc } from 'hono/client'
-import { type FormEvent, useCallback, useEffect, useState } from 'react'
+import {
+  createContext,
+  type FormEvent,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { useChannel } from '@/platform/realtime/use-channel'
 import { Entity } from '@/ui/entity'
 import type { TavernApi } from './api'
@@ -61,16 +70,44 @@ const timeOf = (at: number) =>
   new Date(at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 
 /**
+ * État de la Taverne, partagé avec les composants qu'un autre module place dans son écran : les
+ * joueurs présents, les messages, et l'instant où chaque message reçu en direct est arrivé, sur
+ * l'horloge du navigateur. Les messages de l'historique n'ont pas d'instant d'arrivée.
+ */
+export interface TavernState {
+  userId: string
+  players: PresentPlayer[]
+  messages: TavernMessage[]
+  arrivals: Record<number, number>
+}
+
+const TavernContext = createContext<TavernState>({
+  userId: '',
+  players: [],
+  messages: [],
+  arrivals: {},
+})
+
+/** État de la Taverne, lu depuis un composant placé dans son écran. */
+export const useTavernState = () => useContext(TavernContext)
+
+/**
  * Écran de la Taverne : salon de discussion et joueurs présents. Les messages arrivent par
  * l'historique, relu à chaque ouverture du canal, et par le canal temps réel, qui ne diffuse
  * que les messages à venir. La présence repose sur un signal régulier, un départ étant
- * signalé lorsque le joueur quitte la page.
+ * signalé lorsque le joueur quitte la page. Les composants passés en enfants, placés sous le
+ * salon, lisent son état par useTavernState.
  */
-export function TavernScreen({ userId }: { userId: string }) {
+export function TavernScreen({ userId, children }: { userId: string; children?: ReactNode }) {
   const [messages, setMessages] = useState<TavernMessage[]>([])
   const [players, setPlayers] = useState<PresentPlayer[]>([])
   const [draft, setDraft] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [arrivals, setArrivals] = useState<Record<number, number>>({})
+
+  const arrived = useCallback((id: number) => {
+    setArrivals((current) => (id in current ? current : { ...current, [id]: Date.now() }))
+  }, [])
 
   const refresh = useCallback(async () => {
     const res = await client.messages.$get()
@@ -80,7 +117,9 @@ export function TavernScreen({ userId }: { userId: string }) {
   }, [])
 
   const status = useChannel(TAVERN_CHANNEL, (event) => {
-    setMessages((current) => merge(current, [event.data as unknown as TavernMessage]))
+    const message = event.data as unknown as TavernMessage
+    setMessages((current) => merge(current, [message]))
+    arrived(message.id)
   })
 
   useEffect(() => {
@@ -113,8 +152,14 @@ export function TavernScreen({ userId }: { userId: string }) {
       setError(null)
       setDraft('')
       setMessages((current) => merge(current, [body.message]))
+      arrived(body.message.id)
     }
   }
+
+  const state = useMemo(
+    () => ({ userId, players, messages, arrivals }),
+    [userId, players, messages, arrivals],
+  )
 
   return (
     <>
@@ -165,6 +210,8 @@ export function TavernScreen({ userId }: { userId: string }) {
           </ul>
         </section>
       </div>
+
+      <TavernContext.Provider value={state}>{children}</TavernContext.Provider>
     </>
   )
 }

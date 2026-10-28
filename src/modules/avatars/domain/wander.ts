@@ -15,8 +15,12 @@ export interface Plan {
   pauseMs: number
 }
 
-/** Distance minimale entre un personnage et le bord de la scène. */
-export const MARGIN = 0.08
+/**
+ * Distance minimale entre un personnage et le bord de la scène. Elle laisse la place d'une bulle
+ * entière de chaque côté, et la scène reste assez large pour qu'une marche puisse toujours
+ * rebrousser chemin : sa largeur utile est au moins le double de la marche la plus longue.
+ */
+export const MARGIN = 0.18
 
 /** Vitesse de marche, en largeurs de scène par seconde. */
 export const SPEED = 0.05

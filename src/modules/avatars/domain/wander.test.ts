@@ -25,6 +25,10 @@ describe('Déplacements - limites de la scène', () => {
     }
   })
 
+  it('laisse à la scène la place de rebrousser chemin après la marche la plus longue', () => {
+    expect(1 - 2 * MARGIN).toBeGreaterThanOrEqual(2 * STEP.max)
+  })
+
   it('rebrousse chemin au bord de la scène, quel que soit le tirage', () => {
     for (const random of [() => 0, () => 0.25, () => 0.75, () => 0.999]) {
       expect(planMove(MARGIN, random).facing).toBe('right')
