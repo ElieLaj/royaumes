@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { sql } from 'drizzle-orm'
 import { describe, expect, it } from 'vitest'
+import { SKIN_LOOKS, SKINS } from '@/modules/avatars/contracts'
 import { SOURCE_EVENTS } from '@/modules/notifications/contracts'
 import { createTestDatabase } from '@/platform/db/client'
 
@@ -44,6 +45,18 @@ describe("Fonctions d'aptitude", () => {
         .join('\n')
       for (const type of types) {
         expect(source, `${module} ne publie plus l'événement ${type}`).toContain(`type: '${type}'`)
+      }
+    }
+  })
+
+  it('fournit les deux images de chaque personnage du catalogue', () => {
+    for (const skin of SKINS) {
+      for (const sprite of [SKIN_LOOKS[skin].idle, SKIN_LOOKS[skin].walk]) {
+        const file = path.join(process.cwd(), 'public', sprite.src)
+        expect(
+          existsSync(file),
+          `l'image ${sprite.src} du personnage ${skin} est introuvable`,
+        ).toBe(true)
       }
     }
   })
