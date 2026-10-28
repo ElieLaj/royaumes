@@ -152,11 +152,11 @@ Indicateurs après l'ajout du module :
 | Indicateur | À l'étiquette `td11-fin` | À l'étiquette `eval-fin` | Après les Avatars |
 | --- | --- | --- | --- |
 | Nombre de tests | 236 | 265 | 291 |
-| Couverture des lignes | 75,3 % | 74,9 % | 71,7 % |
+| Couverture des lignes | 75,3 % | 74,9 % | 71,0 % |
 | Violations des règles d'architecture | 0 | 0 | 0 |
 | Fonctions d'aptitude | 2 | 3 | 4 |
 
-La baisse de la couverture vient de la scène (78 lignes sans test) : le reste du module est couvert à 100 %
+La baisse de la couverture vient de la scène (95 lignes sans test) : le reste du module est couvert à 100 %
 (63 lignes sur 63).
 
 ## Usage de l'IA générative

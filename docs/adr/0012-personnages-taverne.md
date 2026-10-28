@@ -44,7 +44,9 @@ pures, testées sans navigateur : la prochaine marche d'un personnage, dans la s
 après une pause tirée au hasard, le hasard étant fourni par l'appelant ; le résumé d'un message et sa
 durée d'affichage, de six secondes, mesurée sur l'horloge du navigateur qui le reçoit, et non sur celle du
 serveur. Le navigateur utilise le GIF de marche pendant une marche, et l'image de repos entre deux
-marches. Les animations sont suspendues si le système demande de réduire les mouvements.
+marches : les deux images sont affichées en permanence, l'une masquée, pour qu'aucune ne se charge au
+moment de changer d'état. Un personnage ne se déplace qu'une fois son GIF chargé, et reprend son image de
+repos à la fin réelle du déplacement, signalée par le navigateur, et non à une minuterie qui l'anticiperait. Les animations sont suspendues si le système demande de réduire les mouvements.
 
 Le module ne lit pas la Taverne lui-même. L'écran de la Taverne expose son état (joueurs présents,
 messages, instant d'arrivée des messages en direct) par un contexte, et accepte des composants enfants
