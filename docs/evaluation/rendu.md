@@ -2,7 +2,7 @@
 
 - Auteur : Elie Lajoinie
 - Module : `notifications`
-- Adresse du déploiement : À COMPLÉTER avant la pose de l'étiquette, avec l'adresse Vercel de production, identique à celle de la rubrique « About » du dépôt
+- Adresse du déploiement : https://royaumes-eta.vercel.app
 - Fiche de cadrage : [fiche-cadrage.md](fiche-cadrage.md)
 
 Tous les fichiers cités sont relatifs à la racine du dépôt. Les tests sont désignés par le titre de leur
