@@ -1,7 +1,7 @@
 # Bilan technique de Royaumes
 
-- Date : 2026-10-23
-- Version examinée : état du dépôt au rendu de l'évaluation (étiquette `eval-fin`), comparé à l'étiquette `td11-fin`
+- Date : 2026-10-28
+- Version examinée : état du dépôt après l'ajout du module Avatars, postérieur à l'étiquette `eval-fin`, comparé aux étiquettes `eval-fin` et `td11-fin`
 - Auteur : Elie Lajoinie
 
 Ce bilan dresse l'état technique du projet au terme de son développement, à partir de ses
@@ -13,12 +13,12 @@ ou au document qui le produit.
 
 | Élément | Valeur |
 | --- | --- |
-| Modules métier | 7 : `realm`, `dungeon`, `market`, `ranking`, `tavern`, `notifications`, `system` (6 à `td11-fin`) |
+| Modules métier | 8 : `realm`, `dungeon`, `market`, `ranking`, `tavern`, `notifications`, `avatars`, `system` (7 à `eval-fin`, 6 à `td11-fin`) |
 | Briques de la plateforme | 9 : `auth`, `cron`, `db`, `event-store`, `http`, `outbox`, `privacy`, `projection`, `realtime` |
 | Service extrait | 1 : `src/services/village`, non déployé (ADR 0009) |
-| Lignes de code, hors tests | 8 692 (`src` et `app`), contre 7 913 à `td11-fin` |
-| Fichiers de test, nombre de tests | 39 fichiers, 265 tests, contre 36 fichiers et 236 tests à `td11-fin` |
-| Commits | 103, dont 19 depuis `td11-fin` (84) |
+| Lignes de code, hors tests | 9 359 (`src` et `app`), contre 8 692 à `eval-fin` et 7 913 à `td11-fin` |
+| Fichiers de test, nombre de tests | 43 fichiers, 288 tests, contre 39 fichiers et 265 tests à `eval-fin`, et 36 fichiers et 236 tests à `td11-fin` |
+| Commits | 113, dont 10 depuis `eval-fin` (103) et 29 depuis `td11-fin` (84) |
 | Hébergement | Vercel (Francfort), base Neon (Francfort) |
 
 | Module | Stockage | Lignes, hors tests |
@@ -27,8 +27,9 @@ ou au document qui le produit.
 | `dungeon` | Event Sourcing, projection des expéditions ouvertes | 1 939 |
 | `market` | Event Sourcing, projection des offres, saga | 1 205 |
 | `ranking` | Projection du journal | 445 |
-| `tavern` | Tables ordinaires | 664 |
-| `notifications` | Tables ordinaires, tenues par une projection du Marché et du Donjon | 759 |
+| `tavern` | Tables ordinaires | 711 |
+| `notifications` | Tables ordinaires, tenues par une projection du Marché et du Donjon | 769 |
+| `avatars` | Tables ordinaires (un choix par joueur) ; scène placée dans la Taverne | 575 |
 | `system` | Aucun | 73 |
 
 Le service Village compte 76 lignes, et la plateforme 1 577. Ces chiffres s'obtiennent par la boucle
@@ -36,7 +37,7 @@ de la sous-partie 2.1 du TD11, étendue à `src/services/`, et par `git ls-files
 
 ## 2. Les décisions d'architecture
 
-Le registre `docs/adr/README.md` compte onze ADR. L'ADR 0001 est accepté ; les dix autres sont
+Le registre `docs/adr/README.md` compte douze ADR. L'ADR 0001 est accepté ; les onze autres sont
 au statut « proposé » : ils décrivent des décisions appliquées, que l'auteur n'a pas encore validées.
 
 | ADR | Décision | Mise à l'épreuve | Bilan |
@@ -52,25 +53,26 @@ au statut « proposé » : ils décrivent des décisions appliquées, que l'aute
 | 0009 | Extraction du Village, préparée mais non déployée | Six tests de contrat, démonstration à deux processus | A tenu. Reste à rembourser trois dettes avant tout déploiement (DT-010 à DT-012). |
 | 0010 | Tables classiques tenues par une projection pour les Notifications | Reconstruction à l'identique, conservation de trente jours, export et effacement, test de charge | A tenu, avec un coût : la lecture du fil exécute cinq requêtes SQL, et son p99 de 552 ms dépasse le budget de 500 ms (DT-016). La revue de sécurité a montré que l'export omettait les offres et expéditions en cours, corrigé depuis. |
 | 0011 | Lecture du langage publié du Marché et du Donjon, canal global discret | Fonction d'aptitude sur les événements lus, tests du canal, revue de sécurité | A tenu : aucun module existant n'a été modifié. Deux limites : le canal global fait relire son fil à chaque joueur connecté (DT-015), et la fonction d'aptitude ne contrôle que les noms des événements, non leurs champs. |
+| 0012 | Module Avatars : choix du personnage en base, déplacements locaux, composition par l'écran de la Taverne | Tests du domaine et de l'API, fonction d'aptitude sur les images, revue de sécurité, observation dans un navigateur à deux et trois joueurs | A tenu : la Taverne n'a changé que par l'exposition de son état, et la scène ne coûte qu'une requête toutes les trente secondes par visiteur. Deux limites : un changement de personnage n'apparaît chez les autres qu'au plus trente secondes plus tard, et la communication avec la Taverne passe par son interface, non par le journal ni la boîte d'envoi (écart à l'exigence E6). |
 
 ## 3. La qualité
 
 | Caractéristique | Indicateur | Valeur | Appréciation |
 | --- | --- | --- | --- |
-| Adéquation fonctionnelle | Tests réussis ; couverture des domaines | 265 tests (236 à `td11-fin`) ; 99,8 % des lignes des domaines (99,7 %) (`pnpm test:coverage`) | Satisfaisante : les règles du jeu, dont les huit des Notifications, sont testées sans base ni serveur. |
-| Efficacité des performances | Débit et p99 des lectures ; respect du budget | `perf/apres.json` (`td11-fin`) : de 68 à 106 requêtes par seconde, p99 de 356 à 488 ms. `perf/notifications.json` (rendu), jeu de données enrichi d'échanges conclus : de 62 à 112 requêtes par seconde, p99 de 257 à 552 ms, sans erreur | Insuffisante pour deux lectures sur six : le fil des notifications (552 ms) et le Marché (505 ms) dépassent le budget de 500 ms lors de la seconde série du rendu, et le Classement n'a que 63 ms de marge. Les deux séries ne sont pas strictement comparables : le jeu de données a changé. Rien n'est mesuré en production, ni pour les flux temps réel. |
+| Adéquation fonctionnelle | Tests réussis ; couverture des domaines | 288 tests (265 à `eval-fin`, 236 à `td11-fin`) ; 99,8 % des lignes des domaines (99,7 % à `td11-fin`) (`pnpm test:coverage`) | Satisfaisante : les règles du jeu, dont les huit des Notifications et les huit des Avatars, sont testées sans base ni serveur. |
+| Efficacité des performances | Débit et p99 des lectures ; respect du budget | `perf/apres.json` (`td11-fin`) : de 68 à 106 requêtes par seconde, p99 de 356 à 488 ms. `perf/notifications.json` (rendu), jeu de données enrichi d'échanges conclus : de 62 à 112 requêtes par seconde, p99 de 257 à 552 ms, sans erreur | Insuffisante pour deux lectures sur six : le fil des notifications (552 ms) et le Marché (505 ms) dépassent le budget de 500 ms lors de la seconde série du rendu, et le Classement n'a que 63 ms de marge. Les deux séries ne sont pas strictement comparables : le jeu de données a changé. Les routes des Avatars n'ont pas de scénario de charge : la scène ne les appelle qu'une fois toutes les trente secondes par visiteur. Rien n'est mesuré en production, ni pour les flux temps réel. |
 | Fiabilité | Tests de concurrence, de reprise et d'idempotence ; messages abandonnés | Conflits de version, bail et doublons de la boîte d'envoi, reprise de la saga après une panne : tests réussis ; `scripts/dead-letters.ts` : aucun message abandonné en développement | Bonne : chaque mécanisme a son test, et les échecs durables sont désormais signalés et relançables. |
-| Sécurité | Exigences des revues de sécurité et de conformité | 62 exigences : 53 conformes, 1 non conforme, 8 en risque accepté (50 : 42, 1, 7 à `td11-fin`) | Satisfaisante : les contrôles d'accès sont éprouvés, et un seul écart reste ouvert, le secret de signature hors Vercel (section 5). Le risque accepté des Notifications, N11, est celui du canal global. |
-| Maintenabilité | Règles d'architecture ; fonctions d'aptitude ; couverture | 8 règles de dependency-cruiser, 3 fonctions d'aptitude (2 à `td11-fin`), aucune violation ; 74,9 % des lignes couvertes (75,3 %) | Bonne pour le code serveur (modules 93,9 % contre 93,6 %, plateforme 92,6 % comme à `td11-fin`, qui n'a pas changé), mais l'interface (359 lignes, 14 fichiers à 0 %, contre 320 lignes et 13 fichiers) n'est vérifiée par aucun test automatique : une régression du temps réel ne serait détectée que par un essai à la main. La baisse de 0,4 point vient de l'écran des Notifications (39 lignes à 0 %) : le reste du module est couvert à 96 % (101 lignes sur 105). |
+| Sécurité | Exigences des revues de sécurité et de conformité | 73 exigences : 63 conformes, 1 non conforme, 9 en risque accepté (62 : 53, 1, 8 à `eval-fin` ; 50 : 42, 1, 7 à `td11-fin`) | Satisfaisante : les contrôles d'accès sont éprouvés, et un seul écart reste ouvert, le secret de signature hors Vercel (section 5). Le risque accepté des Notifications, N11, est celui du canal global ; celui des Avatars, A11, est l'origine non documentée des images. |
+| Maintenabilité | Règles d'architecture ; fonctions d'aptitude ; couverture | 8 règles de dependency-cruiser, 4 fonctions d'aptitude (3 à `eval-fin`, 2 à `td11-fin`), aucune violation ; 72,4 % des lignes couvertes (74,9 % à `eval-fin`, 75,3 % à `td11-fin`) | Bonne pour le code serveur (modules 94,0 % contre 93,6 %, plateforme 92,6 % comme à `td11-fin`, qui n'a pas changé), mais l'interface (442 lignes, 15 fichiers à 0 %, contre 359 lignes et 14 fichiers à `eval-fin`, et 320 lignes et 13 fichiers à `td11-fin`) n'est vérifiée par aucun test automatique : une régression du temps réel ne serait détectée que par un essai à la main. La baisse vient des écrans, sans test : celui des Notifications (39 lignes) et la scène des Avatars (74 lignes) ; le reste de ces deux modules est couvert à 96 % et à 100 %. |
 | Flexibilité | Extraction d'un module ; changement de base entre local et production | Village extrait, avec retour arrière sans migration ; PGlite et Neon derrière le même type `Db`, mêmes migrations | Bonne : l'extraction est démontrée, non déployée. |
 
 ## 4. La dette technique
 
 | Indicateur | Valeur |
 | --- | --- |
-| Entrées consignées | 17 (DT-001 à DT-017) ; 14 à `td11-fin` |
+| Entrées consignées | 18 (DT-001 à DT-018) ; 17 à `eval-fin`, 14 à `td11-fin` |
 | Entrées remboursées, dont à l'échéance prévue | 9, dont 9 à l'échéance prévue |
-| Entrées ouvertes | 8 : DT-010 à DT-012 (service extrait), DT-013 et DT-014 (revues de sécurité), DT-015 à DT-017 (Notifications et plateforme) ; 5 à `td11-fin` |
+| Entrées ouvertes | 9 : DT-010 à DT-012 (service extrait), DT-013 et DT-014 (revues de sécurité), DT-015 à DT-018 (Notifications, plateforme et Avatars) ; 8 à `eval-fin`, 5 à `td11-fin` |
 
 Analyse : les neuf premières entrées ont été consignées au moment où le raccourci a été pris, et
 remboursées au TD annoncé, y compris au TD11 pour la limitation des tentatives, les messages
@@ -89,6 +91,9 @@ mais un défaut de la plateforme, découvert en vérifiant les entrées invalide
 consigné faute de l'avoir corrigé, pour ne pas élargir le périmètre. Leurs échéances sont l'accueil
 de plus de joueurs, et le déploiement public.
 
+Le module Avatars en a ajouté une quatrième, DT-018 : les tailles d'affichage de ses images, mesurées à la main, que
+seul l'ajout d'un quatrième personnage rendrait coûteuses à déduire.
+
 ## 5. Les revues
 
 | Revue | Exigences | Conformes | Non conformes ou en risque accepté | Actions ouvertes |
@@ -98,6 +103,7 @@ de plus de joueurs, et le déploiement public.
 | Sécurité du Marché | 10 | 10 | 0 | Réserves de M8 : DT-014 ; `CRON_SECRET` à vérifier sur Vercel |
 | Conformité au RGPD | 10 | 8 | 2 : R4 et R10 en risque accepté | R8 et R9 remboursées (DT-008, DT-009) ; plan de l'hébergeur, accord de traitement et durée des journaux à vérifier. Non rejouée pour les Notifications : leur traitement T8 est au registre, et vérifié par la revue de sécurité du module |
 | Sécurité des Notifications | 12 | 11 | 1 : N11 en risque accepté | DT-015 et DT-016 (N11), DT-017 (N3, défaut de la plateforme) ; trois parcours à vérifier sur le déploiement |
+| Sécurité des Avatars | 11 | 10 | 1 : A11 en risque accepté | DT-017 (A3, défaut de la plateforme) ; A11 : origine et licence des images à documenter ; trois parcours à vérifier sur le déploiement |
 
 Toute action qui appelle une modification du code figure au registre de la dette. Les actions qui
 demandent une vérification sur le déploiement réel, S6, `CRON_SECRET` et l'offre de l'hébergeur, n'y
@@ -110,7 +116,7 @@ aux revues.
 | --- | --- | --- | --- |
 | 1 | La charge des flux temps réel croît avec le nombre de joueurs connectés : chaque flux relit le journal deux fois par seconde (ADR 0003), et la base de production n'ouvre que cinq connexions par instance. Le canal global des notifications y ajoute une relecture du fil, la lecture la plus lente du jeu (552 ms au p99), par joueur connecté et par événement notifiable (DT-015, DT-016) | La latence des lectures du test de charge augmente, ou la base refuse des connexions, dès que des flux sont ouverts | Étendre le test de charge à des flux ouverts avant d'accueillir plus de joueurs ; réduire à une requête le contrôle de fraîcheur des projections ; donner à la source d'un canal son nom, pour ouvrir un canal par joueur ; étudier un intervalle de lecture adaptatif ou la notification de la base |
 | 2 | La croissance du journal allonge la reconstruction des projections (ADR 0006) et l'effacement d'un compte (ADR 0008), qui le parcourent entièrement, pendant une requête | Une reconstruction ou un effacement approche la durée maximale d'une fonction Vercel | Mesurer ces deux durées sur un journal de taille croissante ; reconstruire hors requête, et rechercher les événements d'un joueur par un index |
-| 3 | L'interface, qui représente 359 lignes sans aucun test, peut régresser sans que `pnpm verify` le détecte, alors que le temps réel en dépend | Un défaut de l'interface découvert par un joueur, ou lors d'une vérification à la main | Écrire un test de bout en bout, exécuté séparément de `pnpm verify` en raison de sa durée, qui couvre la connexion, un échange du Marché et la réception en temps réel, dont celle d'une notification |
+| 3 | L'interface, qui représente 442 lignes sans aucun test, peut régresser sans que `pnpm verify` le détecte, alors que le temps réel en dépend | Un défaut de l'interface découvert par un joueur, ou lors d'une vérification à la main | Écrire un test de bout en bout, exécuté séparément de `pnpm verify` en raison de sa durée, qui couvre la connexion, un échange du Marché et la réception en temps réel, dont celle d'une notification |
 | 4 | Le module Notifications dépend de la forme des événements du Marché et du Donjon, qui n'ont pas de contrat versionné : la fonction d'aptitude ne contrôle que les noms des types, non leurs champs (`sellerId`, `reason`, `hostId`, `playerId`, `result`) | Un champ renommé dans le Marché ou le Donjon, sans que les tests de la projection, qui construisent eux-mêmes ces événements, échouent | Étendre la fonction d'aptitude aux champs lus, ou publier ces événements dans un contrat versionné que les deux côtés valident |
 
 ## 7. Conclusion
@@ -122,7 +128,8 @@ démontré que le monolithe tient sa promesse de modularité. L'ajout du module 
 confirmé : aucun module existant n'a été modifié, ni la configuration de dependency-cruiser. Les seuls
 fichiers existants touchés sont la racine de composition, la navigation, le thème, la feuille de style,
 le journal des migrations, le test de charge et le test des fonctions d'aptitude, que l'on a complété
-sans retirer ni affaiblir aucun test. Trois conditions sont à remplir. Il faut d'abord confirmer sur
+sans retirer ni affaiblir aucun test. Le module Avatars, ajouté après le rendu, l'a confirmé à son tour : la Taverne n'a changé que par
+l'exposition de son état à ses enfants, sans modifier ses tables, ses routes ni ses règles. Trois conditions sont à remplir. Il faut d'abord confirmer sur
 le déploiement réel les points que les revues n'ont pu vérifier : la configuration de la tâche
 planifiée, le cookie de session et l'offre de l'hébergeur. Il faut ensuite mesurer la charge des
 flux temps réel et la durée des opérations qui parcourent le journal, seuls risques que le projet
